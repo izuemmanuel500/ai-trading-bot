@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Trading Bot</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <header class="topbar">
+
+        <div class="brand">
+            <div class="brand-icon">AI</div>
+
+            <div>
+                <h1>TradeMind</h1>
+                <span>AI Paper Trading</span>
+            </div>
+        </div>
+
+        <div class="status">
+            <span class="status-dot"></span>
+            PAPER MODE
+        </div>
+
+    </header>
+
+
+    <main class="container">
+
+        <section class="hero">
+
+            <div>
+                <p class="eyebrow">MARKET OVERVIEW</p>
+
+                <h2>AI Trading Dashboard</h2>
+
+                <p class="subtitle">
+                    Analyze the market and test trading strategies
+                    without risking real money.
+                </p>
+            </div>
+
+            <button class="run-button" onclick="runBot()">
+                ▶ Run AI Trader
+            </button>
+
+        </section>
+
+
+        <!-- MARKET PRICE -->
+
+        <section class="price-card">
+
+            <div>
+
+                <p class="label">
+                    BTC / USDT
+                </p>
+
+                <div class="price" id="btc-price">
+                    ${{ "%.2f"|format(price or 0) }}
+                </div>
+
+            </div>
+
+            <div class="market-status">
+
+                <span class="live-dot"></span>
+
+                Live Market Data
+
+            </div>
+
+        </section>
+
+
+        <!-- STATISTICS -->
+
+        <section class="stats-grid">
+
+            <div class="stat-card">
+
+                <p>USDT Balance</p>
+
+                <h3 id="usdt">
+                    ${{ "%.2f"|format(usdt or 0) }}
+                </h3>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <p>BTC Holdings</p>
+
+                <h3 id="btc">
+                    {{ "%.6f"|format(btc or 0) }}
+                </h3>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <p>Portfolio Value</p>
+
+                <h3 id="portfolio">
+                    ${{ "%.2f"|format((usdt or 0) + (btc or 0) * (price or 0)) }}
+                </h3>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <p>Total P/L</p>
+
+                <h3 id="profit">
+                    ${{ "%.2f"|format(((usdt or 0) + (btc or 0) * (price or 0)) - 1000) }}
+                </h3>
+
+            </div>
+
+        </section>
+
+
+        <!-- AI SIGNAL -->
+
+        <section class="signal-card">
+
+            <div class="signal-header">
+
+                <div>
+
+                    <p class="eyebrow">
+                        AI MARKET SIGNAL
+                    </p>
+
+                    <h2 id="signal">
+                        {{ signal or "HOLD" }}
+                    </h2>
+
+                </div>
+
+                <div class="brain">
+                    🤖
+                </div>
+
+            </div>
+
+
+            <div class="reason-box">
+
+                <strong>Analysis</strong>
+
+                <p id="reason">
+                    {{ reason or "Waiting for market analysis..." }}
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <!-- RISK MANAGEMENT -->
+
+        <section class="section">
+
+            <div class="section-title">
+
+                <div>
+
+                    <p class="eyebrow">
+                        RISK MANAGEMENT
+                    </p>
+
+                    <h2>Trading Protection</h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="risk-grid">
+
+                <div class="risk-card">
+
+                    <span>Starting Capital</span>
+
+                    <strong>$1,000</strong>
+
+                </div>
+
+
+                <div class="risk-card">
+
+                    <span>Trade Size</span>
+
+                    <strong>$50</strong>
+
+                </div>
+
+
+                <div class="risk-card">
+
+                    <span>Stop Loss</span>
+
+                    <strong>3%</strong>
+
+                </div>
+
+
+                <div class="risk-card">
+
+                    <span>Take Profit</span>
+
+                    <strong>6%</strong>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- TRADING INFORMATION -->
+
+        <section class="section">
+
+            <div class="info-card">
+
+                <div class="info-icon">
+                    🛡️
+                </div>
+
+                <div>
+
+                    <h3>Paper Trading Mode</h3>
+
+                    <p>
+                        This platform uses virtual money.
+                        No real trades are being sent to an exchange.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ACTIVITY -->
+
+        <section class="section">
+
+            <div class="section-title">
+
+                <div>
+
+                    <p class="eyebrow">
+                        SYSTEM STATUS
+                    </p>
+
+                    <h2>Trading Engine</h2>
+
+                </div>
+
+            </div>
+
+
+            <div class="engine-card">
+
+                <div class="engine-row">
+
+                    <span>Market Data</span>
+
+                    <strong class="online">
+                        ● ONLINE
+                    </strong>
+
+                </div>
+
+
+                <div class="engine-row">
+
+                    <span>Paper Trading</span>
+
+                    <strong class="online">
+                        ● ACTIVE
+                    </strong>
+
+                </div>
+
+
+                <div class="engine-row">
+
+                    <span>Real Money</span>
+
+                    <strong class="disabled">
+                        ● DISABLED
+                    </strong>
+
+                </div>
+
+
+                <div class="engine-row">
+
+                    <span>AI Strategy</span>
+
+                    <strong>
+                        RULE-BASED V1
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+    </main>
+
+
+    <footer>
+
+        <p>
+            TradeMind © 2026
+        </p>
+
+        <p>
+            Experimental paper-trading platform
+        </p>
+
+    </footer>
+
+
+    <script src="/static/app.js"></script>
+
+</body>
+
+</html>
