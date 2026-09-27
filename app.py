@@ -1,26 +1,92 @@
-from flask import Flask, render_template, jsonify
-import requests
+import os
 import sqlite3
 from datetime import datetime
-import os
+
+import requests
+from flask import Flask, render_template, jsonify, request
+
 
 app = Flask(__name__)
+
+# ============================================================
+# TRADEMIND - MULTI-MARKET PAPER TRADING V1
+# ============================================================
 
 DATABASE = "trading.db"
 
 STARTING_BALANCE = 1000.00
 TRADE_AMOUNT = 50.00
 
-BUY_BELOW = 65000.00
-SELL_ABOVE = 67000.00
-
 STOP_LOSS_PERCENT = 3.0
 TAKE_PROFIT_PERCENT = 6.0
 
+TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
-# -----------------------------
+
+# ------------------------------------------------------------
+# SUPPORTED MARKETS
+# ------------------------------------------------------------
+
+MARKETS = {
+    "BTC/USD": {
+        "name": "Bitcoin",
+        "type": "Crypto",
+        "symbol": "BTC/USD"
+    },
+
+    "ETH/USD": {
+        "name": "Ethereum",
+        "type": "Crypto",
+        "symbol": "ETH/USD"
+    },
+
+    "EUR/USD": {
+        "name": "Euro / US Dollar",
+        "type": "Forex",
+        "symbol": "EUR/USD"
+    },
+
+    "GBP/USD": {
+        "name": "British Pound / US Dollar",
+        "type": "Forex",
+        "symbol": "GBP/USD"
+    },
+
+    "USD/JPY": {
+        "name": "US Dollar / Japanese Yen",
+        "type": "Forex",
+        "symbol": "USD/JPY"
+    },
+
+    "GBP/JPY": {
+        "name": "British Pound / Japanese Yen",
+        "type": "Forex",
+        "symbol": "GBP/JPY"
+    },
+
+    "XAU/USD": {
+        "name": "Gold",
+        "type": "Metal",
+        "symbol": "XAU/USD"
+    },
+
+    "XAG/USD": {
+        "name": "Silver",
+        "type": "Metal",
+        "symbol": "XAG/USD"
+    },
+
+    "WTI/USD": {
+        "name": "US Oil (WTI)",
+        "type": "Commodity",
+        "symbol": "WTI/USD"
+    }
+}
+
+
+# ------------------------------------------------------------
 # DATABASE
-# -----------------------------
+# ------------------------------------------------------------
 
 def get_db():
     connection = sqlite3.connect(DATABASE)
@@ -31,8 +97,9 @@ def get_db():
 def initialize_database():
 
     connection = get_db()
+    cursor = connection.cursor()
 
-    connection.execute("""
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS portfolio (
             id INTEGER PRIMARY KEY,
             usdt REAL NOT NULL,
@@ -40,24 +107,25 @@ def initialize_database():
         )
     """)
 
-    connection.execute("""
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
+            market TEXT NOT NULL,
             action TEXT NOT NULL,
             price REAL NOT NULL,
-            btc_amount REAL NOT NULL,
-            usdt_amount REAL NOT NULL,
-            reason TEXT
+            quantity REAL NOT NULL,
+            amount REAL NOT NULL,
+            reason TEXT NOT NULL
         )
     """)
 
-    existing = connection.execute(
-        "SELECT id FROM portfolio WHERE id = 1"
-    ).fetchone()
+    # Create starting portfolio if it does not exist
+    cursor.execute("SELECT COUNT(*) FROM portfolio")
+    count = cursor.fetchone()[0]
 
-    if not existing:
-        connection.execute(
+    if count == 0:
+        cursor.execute(
             "INSERT INTO portfolio (id, usdt, btc) VALUES (1, ?, ?)",
             (STARTING_BALANCE, 0.0)
         )
@@ -66,23 +134,42 @@ def initialize_database():
     connection.close()
 
 
-# -----------------------------
+# ------------------------------------------------------------
 # MARKET DATA
-# -----------------------------
+# ------------------------------------------------------------
 
-def get_btc_price():
+def get_market_price(market):
+
+    if not TWELVE_DATA_API_KEY:
+        print("ERROR: TWELVE_DATA_API_KEY is not configured.")
+        return None
+
+    if market not in MARKETS:
+        print("ERROR: Unsupported market:", market)
+        return None
+
+    symbol = MARKETS[market]["symbol"]
 
     try:
 
         response = requests.get(
-            "https://api.binance.com/api/v3/ticker/price",
-            params={"symbol": "BTCUSDT"},
+            "https://api.twelvedata.com/price",
+            params={
+                "symbol": symbol,
+                "apikey": TWELVE_DATA_API_KEY
+            },
             timeout=10
         )
 
         response.raise_for_status()
 
         data = response.json()
+
+        if "price" not in data:
+
+            print("Twelve Data response:", data)
+
+            return None
 
         return float(data["price"])
 
@@ -93,9 +180,9 @@ def get_btc_price():
         return None
 
 
-# -----------------------------
+# ------------------------------------------------------------
 # PORTFOLIO
-# -----------------------------
+# ------------------------------------------------------------
 
 def get_portfolio():
 
@@ -107,226 +194,199 @@ def get_portfolio():
 
     connection.close()
 
-    return portfolio
+    return dict(portfolio)
 
 
-# -----------------------------
-# TRADING STRATEGY
-# -----------------------------
+# ------------------------------------------------------------
+# TRADING SIGNAL
+# ------------------------------------------------------------
 
 def generate_signal(price):
 
-    portfolio = get_portfolio()
+    if price is None:
+        return "ERROR"
 
-    btc = portfolio["btc"]
-    usdt = portfolio["usdt"]
-
-    # BUY SIGNAL
-    if price <= BUY_BELOW and usdt >= TRADE_AMOUNT:
-
-        return {
-            "signal": "BUY",
-            "reason": "BTC is below the configured buy threshold."
-        }
-
-    # SELL SIGNAL
-    if price >= SELL_ABOVE and btc > 0:
-
-        return {
-            "signal": "SELL",
-            "reason": "BTC reached the configured sell threshold."
-        }
-
-    return {
-        "signal": "HOLD",
-        "reason": "No trading condition has been triggered."
-    }
-
-
-# -----------------------------
-# PAPER TRADE EXECUTION
-# -----------------------------
-
-def execute_trade(price, signal, reason):
-
-    connection = get_db()
-
-    portfolio = connection.execute(
-        "SELECT * FROM portfolio WHERE id = 1"
-    ).fetchone()
-
-    usdt = portfolio["usdt"]
-    btc = portfolio["btc"]
-
-    timestamp = datetime.utcnow().isoformat()
-
-    # BUY
-    if signal == "BUY" and usdt >= TRADE_AMOUNT:
-
-        btc_bought = TRADE_AMOUNT / price
-
-        new_usdt = usdt - TRADE_AMOUNT
-        new_btc = btc + btc_bought
-
-        connection.execute(
-            """
-            UPDATE portfolio
-            SET usdt = ?, btc = ?
-            WHERE id = 1
-            """,
-            (new_usdt, new_btc)
-        )
-
-        connection.execute(
-            """
-            INSERT INTO trades
-            (timestamp, action, price, btc_amount, usdt_amount, reason)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                timestamp,
-                "BUY",
-                price,
-                btc_bought,
-                TRADE_AMOUNT,
-                reason
-            )
-        )
-
-        connection.commit()
-        connection.close()
-
-        return "BUY"
-
-    # SELL
-    if signal == "SELL" and btc > 0:
-
-        usdt_received = btc * price
-
-        new_usdt = usdt + usdt_received
-        new_btc = 0.0
-
-        connection.execute(
-            """
-            UPDATE portfolio
-            SET usdt = ?, btc = ?
-            WHERE id = 1
-            """,
-            (new_usdt, new_btc)
-        )
-
-        connection.execute(
-            """
-            INSERT INTO trades
-            (timestamp, action, price, btc_amount, usdt_amount, reason)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                timestamp,
-                "SELL",
-                price,
-                btc,
-                usdt_received,
-                reason
-            )
-        )
-
-        connection.commit()
-        connection.close()
-
-        return "SELL"
-
-    connection.close()
+    # V1 is intentionally simple.
+    # We will replace this with indicator/AI analysis later.
 
     return "HOLD"
 
 
-# -----------------------------
-# DASHBOARD
-# -----------------------------
+# ------------------------------------------------------------
+# TRADE LOGGING
+# ------------------------------------------------------------
+
+def record_trade(
+    market,
+    action,
+    price,
+    quantity,
+    amount,
+    reason
+):
+
+    connection = get_db()
+
+    connection.execute(
+        """
+        INSERT INTO trades
+        (timestamp, market, action, price, quantity, amount, reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            datetime.utcnow().isoformat(),
+            market,
+            action,
+            price,
+            quantity,
+            amount,
+            reason
+        )
+    )
+
+    connection.commit()
+    connection.close()
+
+
+# ------------------------------------------------------------
+# HOME
+# ------------------------------------------------------------
 
 @app.route("/")
-def dashboard():
+def home():
 
-    price = get_btc_price()
+    selected_market = request.args.get(
+        "market",
+        "BTC/USD"
+    )
 
-    if price is None:
+    if selected_market not in MARKETS:
+        selected_market = "BTC/USD"
 
-        return render_template(
-            "dashboard.html",
-            error="Unable to retrieve market data."
-        )
+    price = get_market_price(selected_market)
 
     portfolio = get_portfolio()
 
-    signal_data = generate_signal(price)
+    if price is None:
+        signal = "NO DATA"
+    else:
+        signal = generate_signal(price)
 
     return render_template(
         "dashboard.html",
         price=price,
-        usdt=portfolio["usdt"],
-        btc=portfolio["btc"],
-        signal=signal_data["signal"],
-        reason=signal_data["reason"]
+        usdt=round(portfolio["usdt"], 2),
+        btc=round(portfolio["btc"], 8),
+        portfolio=portfolio,
+        signal=signal,
+        market=selected_market,
+        markets=MARKETS,
+        stop_loss=STOP_LOSS_PERCENT,
+        take_profit=TAKE_PROFIT_PERCENT
     )
 
 
-# -----------------------------
-# RUN PAPER TRADING
-# -----------------------------
+# ------------------------------------------------------------
+# RUN PAPER TRADER
+# ------------------------------------------------------------
 
 @app.route("/api/run", methods=["POST"])
 def run_bot():
 
-    price = get_btc_price()
+    data = request.get_json(silent=True) or {}
+
+    market = data.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+
+        return jsonify({
+            "error": "Unsupported market."
+        }), 400
+
+    price = get_market_price(market)
 
     if price is None:
 
         return jsonify({
-            "success": False,
             "error": "Market data unavailable."
         }), 503
 
-    signal_data = generate_signal(price)
-
-    action = execute_trade(
-        price,
-        signal_data["signal"],
-        signal_data["reason"]
-    )
-
-    portfolio = get_portfolio()
-
-    portfolio_value = (
-        portfolio["usdt"] +
-        portfolio["btc"] * price
-    )
-
-    profit = portfolio_value - STARTING_BALANCE
+    signal = generate_signal(price)
 
     return jsonify({
         "success": True,
+        "market": market,
         "price": price,
-        "signal": signal_data["signal"],
-        "action": action,
-        "reason": signal_data["reason"],
-        "usdt": portfolio["usdt"],
-        "btc": portfolio["btc"],
-        "portfolio_value": portfolio_value,
-        "profit": profit
+        "signal": signal,
+        "message": "Paper-trading analysis completed."
     })
 
 
-# -----------------------------
-# TRADE HISTORY
-# -----------------------------
+# ------------------------------------------------------------
+# MARKET LIST
+# ------------------------------------------------------------
+
+@app.route("/api/markets")
+def markets_api():
+
+    return jsonify(MARKETS)
+
+
+# ------------------------------------------------------------
+# PRICE API
+# ------------------------------------------------------------
+
+@app.route("/api/price")
+def price_api():
+
+    market = request.args.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+
+        return jsonify({
+            "error": "Unsupported market."
+        }), 400
+
+    price = get_market_price(market)
+
+    if price is None:
+
+        return jsonify({
+            "error": "Market data unavailable."
+        }), 503
+
+    return jsonify({
+        "market": market,
+        "price": price
+    })
+
+
+# ------------------------------------------------------------
+# PORTFOLIO API
+# ------------------------------------------------------------
+
+@app.route("/api/portfolio")
+def portfolio_api():
+
+    return jsonify(get_portfolio())
+
+
+# ------------------------------------------------------------
+# TRADE HISTORY API
+# ------------------------------------------------------------
 
 @app.route("/api/trades")
-def trades():
+def trades_api():
 
     connection = get_db()
 
-    rows = connection.execute(
+    trades = connection.execute(
         """
         SELECT *
         FROM trades
@@ -338,55 +398,44 @@ def trades():
     connection.close()
 
     return jsonify([
-        dict(row)
-        for row in rows
+        dict(trade)
+        for trade in trades
     ])
 
 
-# -----------------------------
-# PORTFOLIO API
-# -----------------------------
+# ------------------------------------------------------------
+# HEALTH CHECK
+# ------------------------------------------------------------
 
-@app.route("/api/portfolio")
-def portfolio_api():
-
-    price = get_btc_price()
-
-    if price is None:
-        return jsonify({
-            "error": "Market data unavailable."
-        }), 503
-
-    portfolio = get_portfolio()
-
-    total_value = (
-        portfolio["usdt"] +
-        portfolio["btc"] * price
-    )
-
-    profit = total_value - STARTING_BALANCE
+@app.route("/health")
+def health():
 
     return jsonify({
-        "usdt": portfolio["usdt"],
-        "btc": portfolio["btc"],
-        "btc_price": price,
-        "total_value": total_value,
-        "profit": profit
+        "status": "online",
+        "paper_trading": True,
+        "real_money": False,
+        "market_data": bool(TWELVE_DATA_API_KEY)
     })
 
 
-# -----------------------------
-# START
-# -----------------------------
+# ------------------------------------------------------------
+# START APPLICATION
+# ------------------------------------------------------------
 
 initialize_database()
 
+
 if __name__ == "__main__":
 
-    port = int(os.environ.get("PORT", 5000))
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
 
     app.run(
         host="0.0.0.0",
         port=port,
         debug=False
-  )
+)
