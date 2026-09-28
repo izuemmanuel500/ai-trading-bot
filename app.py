@@ -1310,4 +1310,261 @@ def run_bot():
         "BTC/USD"
     )
 
-    if market:
+        if market not in MARKETS:
+        return jsonify({
+            "success": False,
+            "error": "Unsupported market."
+        }), 400
+
+    analysis = analyze_market(market)
+
+    if not analysis["success"]:
+        return jsonify({
+            "success": False,
+            "error": analysis.get(
+                "error",
+                "Market analysis failed."
+            )
+        }), 503
+
+    return jsonify({
+        "success": True,
+        "market": market,
+        "signal": analysis["signal"],
+        "price": analysis["price"],
+        "score": analysis["score"],
+        "max_score": analysis["max_score"],
+        "rsi": analysis["rsi"],
+        "ema20": analysis["ema20"],
+        "ema50": analysis["ema50"],
+        "macd": analysis["macd"],
+        "macd_signal": analysis["macd_signal"],
+        "atr": analysis["atr"],
+        "risk": analysis["risk"],
+        "stop_loss": analysis["stop_loss"],
+        "take_profit": analysis["take_profit"],
+        "reasons": analysis["reasons"],
+        "message": (
+            "Paper trading only. "
+            "No real order was placed."
+        )
+    })
+
+
+# ============================================================
+# BACKTEST API
+# ============================================================
+
+@app.route(
+    "/api/backtest",
+    methods=["GET", "POST"]
+)
+def run_backtest():
+
+    if request.method == "POST":
+        data = request.get_json(
+            silent=True
+        ) or {}
+    else:
+        data = request.args
+
+    market = data.get(
+        "market",
+        "BTC/USD"
+    )
+
+    interval = data.get(
+        "interval",
+        "1h"
+    )
+
+    try:
+        outputsize = int(
+            data.get(
+                "outputsize",
+                BACKTEST_MAX_CANDLES
+            )
+        )
+    except (
+        TypeError,
+        ValueError
+    ):
+        outputsize = BACKTEST_MAX_CANDLES
+
+    outputsize = max(
+        100,
+        min(
+            outputsize,
+            BACKTEST_MAX_CANDLES
+        )
+    )
+
+    if market not in MARKETS:
+        return jsonify({
+            "success": False,
+            "error": "Unsupported market."
+        }), 400
+
+    result = backtest_market(
+        market,
+        interval=interval,
+        outputsize=outputsize
+    )
+
+    if not result["success"]:
+        return jsonify(result), 503
+
+    return jsonify(result)
+
+
+# ============================================================
+# MARKETS API
+# ============================================================
+
+@app.route("/api/markets")
+def markets_api():
+
+    return jsonify({
+        "success": True,
+        "markets": MARKETS
+    })
+
+
+# ============================================================
+# PRICE API
+# ============================================================
+
+@app.route("/api/price")
+def price_api():
+
+    market = request.args.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+        return jsonify({
+            "success": False,
+            "error": "Unsupported market."
+        }), 400
+
+    price = get_market_price(
+        market
+    )
+
+    if price is None:
+        return jsonify({
+            "success": False,
+            "error": "Market price unavailable."
+        }), 503
+
+    return jsonify({
+        "success": True,
+        "market": market,
+        "price": price
+    })
+
+
+# ============================================================
+# ANALYSIS API
+# ============================================================
+
+@app.route("/api/analysis")
+def analysis_api():
+
+    market = request.args.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+        return jsonify({
+            "success": False,
+            "error": "Unsupported market."
+        }), 400
+
+    analysis = analyze_market(
+        market
+    )
+
+    if not analysis["success"]:
+        return jsonify(analysis), 503
+
+    return jsonify(analysis)
+
+
+# ============================================================
+# PORTFOLIO API
+# ============================================================
+
+@app.route("/api/portfolio")
+def portfolio_api():
+
+    return jsonify({
+        "success": True,
+        "portfolio": get_portfolio()
+    })
+
+
+# ============================================================
+# TRADES API
+# ============================================================
+
+@app.route("/api/trades")
+def trades_api():
+
+    connection = get_db()
+
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM trades
+        ORDER BY id DESC
+        LIMIT 100
+        """
+    ).fetchall()
+
+    connection.close()
+
+    return jsonify({
+        "success": True,
+        "trades": [
+            dict(row)
+            for row in rows
+        ]
+    })
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "ok",
+        "app": "TradeMind",
+        "mode": "PAPER"
+    })
+
+
+# ============================================================
+# STARTUP
+# ============================================================
+
+initialize_database()
+
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=int(
+            os.getenv(
+                "PORT",
+                "5000"
+            )
+        ),
+        debug=False
+)
