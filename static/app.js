@@ -12,13 +12,6 @@ async function runBot() {
     }
 
     try {
-        const controller = new AbortController();
-
-        // Stop waiting forever if the server takes too long
-        const timeout = setTimeout(() => {
-            controller.abort();
-        }, 30000);
-
         const response = await fetch("/api/run", {
             method: "POST",
             headers: {
@@ -26,18 +19,13 @@ async function runBot() {
             },
             body: JSON.stringify({
                 market: market
-            }),
-            signal: controller.signal
+            })
         });
-
-        clearTimeout(timeout);
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(
-                data.error || "Market analysis failed"
-            );
+            throw new Error(data.error || "Market analysis failed");
         }
 
         alert(
@@ -48,26 +36,14 @@ async function runBot() {
             data.message
         );
 
-        // Refresh dashboard after successful analysis
         window.location.reload();
 
     } catch (error) {
-
-        if (error.name === "AbortError") {
-            alert(
-                "⏱️ TradeMind took too long to respond.\n\n" +
-                "The server may still be processing the analysis. " +
-                "Please try again in a moment."
-            );
-        } else {
-            alert(
-                "❌ Bot error:\n\n" +
-                error.message
-            );
-        }
-
+        alert(
+            "❌ Bot error:\n\n" +
+            error.message
+        );
     } finally {
-
         if (button) {
             button.disabled = false;
             button.textContent = "🤖 Run AI Trader";
@@ -77,16 +53,15 @@ async function runBot() {
 
 
 function changeMarket() {
-
-    const marketSelect =
-        document.querySelector("#marketSelect");
+    const marketSelect = document.querySelector("#marketSelect");
 
     if (!marketSelect) {
         return;
     }
 
-    const market =
-        encodeURIComponent(marketSelect.value);
+    const market = encodeURIComponent(
+        marketSelect.value
+    );
 
     window.location.href =
         "/?market=" + market;
@@ -94,10 +69,8 @@ function changeMarket() {
 
 
 function selectMarket(symbol) {
-
-    const market =
-        encodeURIComponent(symbol);
+    const market = encodeURIComponent(symbol);
 
     window.location.href =
         "/?market=" + market;
-}
+            }
