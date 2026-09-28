@@ -1294,7 +1294,6 @@ def home():
 # ============================================================
 # AI TRADER / ANALYSIS
 # ============================================================
-
 @app.route(
     "/api/run",
     methods=["POST"]
@@ -1310,7 +1309,7 @@ def run_bot():
         "BTC/USD"
     )
 
-        if market not in MARKETS:
+    if market not in MARKETS:
         return jsonify({
             "success": False,
             "error": "Unsupported market."
@@ -1350,10 +1349,6 @@ def run_bot():
         )
     })
 
-
-# ============================================================
-# BACKTEST API
-# ============================================================
 
 @app.route(
     "/api/backtest",
@@ -1417,10 +1412,6 @@ def run_backtest():
     return jsonify(result)
 
 
-# ============================================================
-# MARKETS API
-# ============================================================
-
 @app.route("/api/markets")
 def markets_api():
 
@@ -1429,10 +1420,6 @@ def markets_api():
         "markets": MARKETS
     })
 
-
-# ============================================================
-# PRICE API
-# ============================================================
 
 @app.route("/api/price")
 def price_api():
@@ -1448,9 +1435,7 @@ def price_api():
             "error": "Unsupported market."
         }), 400
 
-    price = get_market_price(
-        market
-    )
+    price = get_market_price(market)
 
     if price is None:
         return jsonify({
@@ -1464,10 +1449,6 @@ def price_api():
         "price": price
     })
 
-
-# ============================================================
-# ANALYSIS API
-# ============================================================
 
 @app.route("/api/analysis")
 def analysis_api():
@@ -1483,19 +1464,13 @@ def analysis_api():
             "error": "Unsupported market."
         }), 400
 
-    analysis = analyze_market(
-        market
-    )
+    analysis = analyze_market(market)
 
     if not analysis["success"]:
         return jsonify(analysis), 503
 
     return jsonify(analysis)
 
-
-# ============================================================
-# PORTFOLIO API
-# ============================================================
 
 @app.route("/api/portfolio")
 def portfolio_api():
@@ -1505,10 +1480,6 @@ def portfolio_api():
         "portfolio": get_portfolio()
     })
 
-
-# ============================================================
-# TRADES API
-# ============================================================
 
 @app.route("/api/trades")
 def trades_api():
@@ -1535,10 +1506,6 @@ def trades_api():
     })
 
 
-# ============================================================
-# HEALTH CHECK
-# ============================================================
-
 @app.route("/health")
 def health():
 
@@ -1549,15 +1516,10 @@ def health():
     })
 
 
-# ============================================================
-# STARTUP
-# ============================================================
-
 initialize_database()
 
 
 if __name__ == "__main__":
-
     app.run(
         host="0.0.0.0",
         port=int(
@@ -1567,4 +1529,4 @@ if __name__ == "__main__":
             )
         ),
         debug=False
-)
+    )=
