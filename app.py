@@ -1310,4 +1310,4 @@ def run_bot():
         "BTC/USD"
     )
 
-    if market
+    if market:
