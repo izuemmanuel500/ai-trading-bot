@@ -1,163 +1,127 @@
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, jsonify, render_template, request
 
+
+# =========================================================
+# TRADEMIND
+# Clean V3 Paper-Trading Backend
+# =========================================================
 
 app = Flask(__name__)
 
-# ============================================================
-# TRADEMIND V3
-# MULTI-MARKET ANALYSIS + BACKTESTING ENGINE
-#
-# PAPER TRADING ONLY
-# REAL ORDERS: DISABLED
-# ============================================================
+
+# =========================================================
+# CONFIGURATION
+# =========================================================
 
 DATABASE = "trading.db"
 
 STARTING_BALANCE = 1000.00
 TRADE_AMOUNT = 50.00
 
-STOP_LOSS_ATR = 1.5
-TAKE_PROFIT_ATR = 3.0
-
 TWELVE_DATA_API_KEY = os.getenv(
     "TWELVE_DATA_API_KEY"
 )
 
-BACKTEST_START_BALANCE = 1000.00
-BACKTEST_TRADE_AMOUNT = 50.00
-BACKTEST_MAX_CANDLES = 500
+TWELVE_DATA_URL = (
+    "https://api.twelvedata.com/time_series"
+)
+
+BACKTEST_MAX_CANDLES = 300
+
+MARKETS = [
+    "BTC/USD",
+    "ETH/USD",
+    "EUR/USD",
+    "GBP/USD",
+    "USD/JPY",
+    "GBP/JPY",
+    "XAU/USD",
+    "XAG/USD",
+    "WTI/USD"
+]
 
 
-# ============================================================
-# MARKETS
-# ============================================================
-
-MARKETS = {
-    "BTC/USD": {
-        "name": "Bitcoin",
-        "type": "Crypto",
-        "symbol": "BTC/USD"
-    },
-
-    "ETH/USD": {
-        "name": "Ethereum",
-        "type": "Crypto",
-        "symbol": "ETH/USD"
-    },
-
-    "EUR/USD": {
-        "name": "Euro / US Dollar",
-        "type": "Forex",
-        "symbol": "EUR/USD"
-    },
-
-    "GBP/USD": {
-        "name": "British Pound / US Dollar",
-        "type": "Forex",
-        "symbol": "GBP/USD"
-    },
-
-    "USD/JPY": {
-        "name": "US Dollar / Japanese Yen",
-        "type": "Forex",
-        "symbol": "USD/JPY"
-    },
-
-    "GBP/JPY": {
-        "name": "British Pound / Japanese Yen",
-        "type": "Forex",
-        "symbol": "GBP/JPY"
-    },
-
-    "XAU/USD": {
-        "name": "Gold",
-        "type": "Metal",
-        "symbol": "XAU/USD"
-    },
-
-    "XAG/USD": {
-        "name": "Silver",
-        "type": "Metal",
-        "symbol": "XAG/USD"
-    },
-
-    "WTI/USD": {
-        "name": "US Oil (WTI)",
-        "type": "Commodity",
-        "symbol": "WTI/USD"
-    }
-}
-
-
-# ============================================================
+# =========================================================
 # DATABASE
-# ============================================================
+# =========================================================
 
 def get_db():
-    connection = sqlite3.connect(DATABASE)
+    connection = sqlite3.connect(
+        DATABASE,
+        timeout=30
+    )
+
     connection.row_factory = sqlite3.Row
+
     return connection
 
 
 def initialize_database():
 
     connection = get_db()
-    cursor = connection.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS portfolio (
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS account (
             id INTEGER PRIMARY KEY,
-            usdt REAL NOT NULL,
-            btc REAL NOT NULL
+            balance REAL NOT NULL
         )
-    """)
+        """
+    )
 
-    cursor.execute("""
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            market TEXT UNIQUE NOT NULL,
+            quantity REAL NOT NULL,
+            entry_price REAL NOT NULL,
+            invested REAL NOT NULL,
+            opened_at TEXT NOT NULL
+        )
+        """
+    )
+
+    connection.execute(
+        """
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
             market TEXT NOT NULL,
-            action TEXT NOT NULL,
-            price REAL NOT NULL,
+            side TEXT NOT NULL,
             quantity REAL NOT NULL,
-            amount REAL NOT NULL,
-            reason TEXT NOT NULL
+            price REAL NOT NULL,
+            value REAL NOT NULL,
+            pnl REAL DEFAULT 0,
+            created_at TEXT NOT NULL
         )
-    """)
+        """
+    )
 
-    cursor.execute("""
-        SELECT COUNT(*)
-        FROM portfolio
-    """)
+    account = connection.execute(
+        "SELECT id FROM account WHERE id = 1"
+    ).fetchone()
 
-    count = cursor.fetchone()[0]
-
-    if count == 0:
-
-        cursor.execute(
+    if account is None:
+        connection.execute(
             """
-            INSERT INTO portfolio
-            (id, usdt, btc)
-            VALUES (1, ?, ?)
+            INSERT INTO account (id, balance)
+            VALUES (1, ?)
             """,
-            (
-                STARTING_BALANCE,
-                0.0
-            )
+            (STARTING_BALANCE,)
         )
 
     connection.commit()
     connection.close()
 
 
-# ============================================================
-# MARKET DATA
-# ============================================================
+# =========================================================
+# TWELVE DATA
+# =========================================================
 
 def get_market_candles(
     market,
@@ -166,120 +130,144 @@ def get_market_candles(
 ):
 
     if not TWELVE_DATA_API_KEY:
-
-        return None, "TWELVE_DATA_API_KEY is missing."
-
-    if market not in MARKETS:
-
-        return None, "Unsupported market."
-
-    symbol = MARKETS[market]["symbol"]
+        return {
+            "success": False,
+            "error": "TWELVE_DATA_API_KEY is not configured."
+        }
 
     try:
 
+        outputsize = int(outputsize)
+
+        outputsize = max(
+            20,
+            min(outputsize, 5000)
+        )
+
         response = requests.get(
-            "https://api.twelvedata.com/time_series",
+            TWELVE_DATA_URL,
             params={
-                "symbol": symbol,
+                "symbol": market,
                 "interval": interval,
                 "outputsize": outputsize,
-                "order": "asc",
                 "apikey": TWELVE_DATA_API_KEY
             },
-            timeout=15
+            timeout=20
         )
 
         response.raise_for_status()
 
         data = response.json()
 
-        if "values" not in data:
+        if "status" in data:
+            if data["status"] == "error":
+                return {
+                    "success": False,
+                    "error": data.get(
+                        "message",
+                        "Twelve Data returned an error."
+                    )
+                }
 
-            print(
-                "Twelve Data response:",
-                data
-            )
+        values = data.get("values")
 
-            return None, data.get(
-                "message",
-                "Market data unavailable."
-            )
+        if not values:
+            return {
+                "success": False,
+                "error": "No market data returned."
+            }
 
         candles = []
 
-        for item in data["values"]:
+        for item in reversed(values):
 
             try:
 
                 candles.append({
-                    "datetime": item["datetime"],
+                    "datetime": item.get("datetime"),
                     "open": float(item["open"]),
                     "high": float(item["high"]),
                     "low": float(item["low"]),
-                    "close": float(item["close"])
+                    "close": float(item["close"]),
+                    "volume": float(
+                        item.get("volume", 0) or 0
+                    )
                 })
 
             except (
-                KeyError,
+                TypeError,
                 ValueError,
-                TypeError
+                KeyError
             ):
-
                 continue
 
-        if len(candles) == 0:
+        if len(candles) < 20:
+            return {
+                "success": False,
+                "error": "Not enough market data."
+            }
 
-            return None, "No market candles returned."
+        return {
+            "success": True,
+            "candles": candles
+        }
 
-        return candles, None
+    except requests.RequestException as error:
+
+        return {
+            "success": False,
+            "error": (
+                "Market data request failed: "
+                + str(error)
+            )
+        }
 
     except Exception as error:
 
-        print(
-            "Market data error:",
-            error
-        )
-
-        return None, str(error)
+        return {
+            "success": False,
+            "error": str(error)
+        }
 
 
 def get_market_price(market):
 
-    candles, error = get_market_candles(
+    result = get_market_candles(
         market,
-        interval="1h",
-        outputsize=5
+        interval="1min",
+        outputsize=2
     )
 
-    if not candles:
-
+    if not result["success"]:
         return None
+
+    candles = result["candles"]
 
     return candles[-1]["close"]
 
 
-# ============================================================
-# INDICATORS
-# ============================================================
+# =========================================================
+# TECHNICAL INDICATORS
+# =========================================================
 
 def ema(values, period):
 
-    if len(values) < period:
+    if not values:
+        return None
 
+    if len(values) < period:
         return None
 
     multiplier = 2 / (period + 1)
 
-    current = (
-        sum(values[:period])
-        / period
-    )
+    current = sum(
+        values[:period]
+    ) / period
 
-    for price in values[period:]:
+    for value in values[period:]:
 
         current = (
-            (price - current)
-            * multiplier
+            (value - current) * multiplier
         ) + current
 
     return current
@@ -287,197 +275,156 @@ def ema(values, period):
 
 def rsi(values, period=14):
 
-    if len(values) < period + 1:
-
+    if len(values) <= period:
         return None
 
     gains = []
     losses = []
 
-    for i in range(1, len(values)):
+    for index in range(1, len(values)):
 
         change = (
-            values[i]
-            - values[i - 1]
+            values[index] -
+            values[index - 1]
         )
 
         if change >= 0:
-
             gains.append(change)
             losses.append(0)
-
         else:
-
             gains.append(0)
-            losses.append(
-                abs(change)
-            )
+            losses.append(abs(change))
 
-    avg_gain = (
-        sum(gains[:period])
-        / period
+    average_gain = (
+        sum(gains[:period]) / period
     )
 
-    avg_loss = (
-        sum(losses[:period])
-        / period
+    average_loss = (
+        sum(losses[:period]) / period
     )
 
-    for i in range(
+    for index in range(
         period,
         len(gains)
     ):
 
-        avg_gain = (
+        average_gain = (
             (
-                avg_gain
-                * (period - 1)
+                average_gain *
+                (period - 1)
             )
-            + gains[i]
+            + gains[index]
         ) / period
 
-        avg_loss = (
+        average_loss = (
             (
-                avg_loss
-                * (period - 1)
+                average_loss *
+                (period - 1)
             )
-            + losses[i]
+            + losses[index]
         ) / period
 
-    if avg_loss == 0:
-
+    if average_loss == 0:
         return 100.0
 
     relative_strength = (
-        avg_gain / avg_loss
+        average_gain /
+        average_loss
     )
 
-    return 100 - (
-        100
-        / (1 + relative_strength)
+    return (
+        100 -
+        (100 / (1 + relative_strength))
     )
 
 
 def macd(values):
 
     if len(values) < 35:
-
         return None, None
 
-    fast_period = 12
-    slow_period = 26
-    signal_period = 9
+    fast = ema(values, 12)
+    slow = ema(values, 26)
+
+    if fast is None or slow is None:
+        return None, None
+
+    macd_value = fast - slow
 
     macd_values = []
 
-    for i in range(
-        slow_period,
-        len(values) + 1
+    for index in range(
+        26,
+        len(values)
     ):
 
-        subset = values[:i]
-
-        fast_ema = ema(
-            subset,
-            fast_period
+        fast_part = ema(
+            values[:index + 1],
+            12
         )
 
-        slow_ema = ema(
-            subset,
-            slow_period
+        slow_part = ema(
+            values[:index + 1],
+            26
         )
 
         if (
-            fast_ema is not None
-            and slow_ema is not None
+            fast_part is not None
+            and slow_part is not None
         ):
-
             macd_values.append(
-                fast_ema
-                - slow_ema
+                fast_part - slow_part
             )
 
-    if len(macd_values) < signal_period:
-
-        return None, None
-
-    macd_line = macd_values[-1]
-
-    signal_line = ema(
+    signal = ema(
         macd_values,
-        signal_period
+        9
     )
 
-    return (
-        macd_line,
-        signal_line
-    )
+    return macd_value, signal
 
 
 def atr(candles, period=14):
 
-    if len(candles) < period + 1:
-
+    if len(candles) <= period:
         return None
 
     true_ranges = []
 
-    for i in range(
+    for index in range(
         1,
         len(candles)
     ):
 
-        current = candles[i]
-        previous = candles[i - 1]
+        high = candles[index]["high"]
+        low = candles[index]["low"]
 
-        high_low = (
-            current["high"]
-            - current["low"]
-        )
-
-        high_previous_close = abs(
-            current["high"]
-            - previous["close"]
-        )
-
-        low_previous_close = abs(
-            current["low"]
-            - previous["close"]
+        previous_close = (
+            candles[index - 1]["close"]
         )
 
         true_range = max(
-            high_low,
-            high_previous_close,
-            low_previous_close
+            high - low,
+            abs(high - previous_close),
+            abs(low - previous_close)
         )
 
-        true_ranges.append(
-            true_range
-        )
+        true_ranges.append(true_range)
+
+    if len(true_ranges) < period:
+        return None
 
     return (
-        sum(
-            true_ranges[-period:]
-        )
-        / period
+        sum(true_ranges[-period:]) /
+        period
     )
 
 
-# ============================================================
-# ANALYSIS ENGINE
-# ============================================================
+# =========================================================
+# MARKET ANALYSIS
+# =========================================================
 
-def calculate_analysis_from_candles(
-    candles
-):
-
-    if len(candles) < 60:
-
-        return {
-            "success": False,
-            "error":
-                "Insufficient historical data."
-        }
+def analyze_candles(candles):
 
     closes = [
         candle["close"]
@@ -496,125 +443,113 @@ def calculate_analysis_from_candles(
         50
     )
 
-    rsi14 = rsi(
+    rsi_value = rsi(
         closes,
         14
     )
 
-    macd_line, macd_signal = macd(
+    macd_value, macd_signal = macd(
         closes
     )
 
-    atr14 = atr(
+    atr_value = atr(
         candles,
         14
     )
 
-    values = [
-        ema20,
-        ema50,
-        rsi14,
-        macd_line,
-        macd_signal,
-        atr14
-    ]
-
-    if any(
-        value is None
-        for value in values
-    ):
-
-        return {
-            "success": False,
-            "error":
-                "Insufficient indicator data."
-        }
-
     score = 0
+    max_score = 5
 
     reasons = []
 
-    if current_price > ema20:
+    # EMA trend
+    if (
+        ema20 is not None
+        and ema50 is not None
+    ):
 
-        score += 1
+        if ema20 > ema50:
 
-        reasons.append(
-            "Price is above EMA 20."
-        )
+            score += 1
 
-    else:
+            reasons.append(
+                "EMA20 is above EMA50."
+            )
 
-        score -= 1
+        else:
 
-        reasons.append(
-            "Price is below EMA 20."
-        )
+            score -= 1
 
-    if ema20 > ema50:
+            reasons.append(
+                "EMA20 is below EMA50."
+            )
 
-        score += 1
+    # RSI
+    if rsi_value is not None:
 
-        reasons.append(
-            "EMA 20 is above EMA 50."
-        )
+        if rsi_value < 35:
 
-    else:
+            score += 2
 
-        score -= 1
+            reasons.append(
+                "RSI indicates potentially oversold conditions."
+            )
 
-        reasons.append(
-            "EMA 20 is below EMA 50."
-        )
+        elif rsi_value > 70:
 
-    if 50 <= rsi14 < 70:
+            score -= 2
 
-        score += 1
+            reasons.append(
+                "RSI indicates potentially overbought conditions."
+            )
 
-        reasons.append(
-            "RSI supports bullish momentum."
-        )
+        elif rsi_value >= 50:
 
-    elif 30 < rsi14 < 50:
+            score += 1
 
-        score -= 1
+            reasons.append(
+                "RSI is above the neutral level."
+            )
 
-        reasons.append(
-            "RSI supports bearish momentum."
-        )
+        else:
 
-    elif rsi14 >= 70:
+            reasons.append(
+                "RSI is below the neutral level."
+            )
 
-        reasons.append(
-            "RSI is overbought."
-        )
+    # MACD
+    if (
+        macd_value is not None
+        and macd_signal is not None
+    ):
 
-    elif rsi14 <= 30:
+        if macd_value > macd_signal:
 
-        reasons.append(
-            "RSI is oversold."
-        )
+            score += 1
 
-    if macd_line > macd_signal:
+            reasons.append(
+                "MACD is above its signal line."
+            )
 
-        score += 1
+        else:
 
-        reasons.append(
-            "MACD is above its signal."
-        )
+            score -= 1
 
-    else:
+            reasons.append(
+                "MACD is below its signal line."
+            )
 
-        score -= 1
+    # Normalize score
+    score = max(
+        -max_score,
+        min(score, max_score)
+    )
 
-        reasons.append(
-            "MACD is below its signal."
-        )
-
-    if score >= 3:
+    if score >= 2:
 
         signal = "BUY"
 
-    elif score <= -3:
+    elif score <= -2:
 
         signal = "SELL"
 
@@ -622,678 +557,635 @@ def calculate_analysis_from_candles(
 
         signal = "HOLD"
 
-    atr_percent = (
-        atr14
-        / current_price
-    ) * 100
-
-    if atr_percent < 1:
-
-        risk = "LOW"
-
-    elif atr_percent < 2.5:
-
-        risk = "MEDIUM"
-
-    else:
-
-        risk = "HIGH"
-
-    if signal == "BUY":
+    if atr_value:
 
         stop_loss = (
-            current_price
-            - (
-                atr14
-                * STOP_LOSS_ATR
-            )
+            current_price -
+            (atr_value * 1.5)
         )
 
         take_profit = (
-            current_price
-            + (
-                atr14
-                * TAKE_PROFIT_ATR
-            )
-        )
-
-    elif signal == "SELL":
-
-        stop_loss = (
-            current_price
-            + (
-                atr14
-                * STOP_LOSS_ATR
-            )
-        )
-
-        take_profit = (
-            current_price
-            - (
-                atr14
-                * TAKE_PROFIT_ATR
-            )
+            current_price +
+            (atr_value * 3)
         )
 
     else:
 
-        stop_loss = None
-        take_profit = None
+        stop_loss = (
+            current_price * 0.98
+        )
+
+        take_profit = (
+            current_price * 1.04
+        )
+
+    if atr_value:
+
+        risk_percent = (
+            atr_value /
+            current_price
+        ) * 100
+
+    else:
+
+        risk_percent = 2.0
 
     return {
-
         "success": True,
-
-        "price": current_price,
-
         "signal": signal,
-
+        "price": current_price,
         "score": score,
-
-        "max_score": 4,
-
-        "rsi": round(
-            rsi14,
-            2
-        ),
-
-        "ema20": round(
-            ema20,
-            6
-        ),
-
-        "ema50": round(
-            ema50,
-            6
-        ),
-
-        "macd": round(
-            macd_line,
-            6
-        ),
-
-        "macd_signal": round(
-            macd_signal,
-            6
-        ),
-
-        "atr": round(
-            atr14,
-            6
-        ),
-
-        "volatility_percent": round(
-            atr_percent,
-            2
-        ),
-
-        "risk": risk,
-
-        "stop_loss": (
-            round(
-                stop_loss,
-                6
-            )
-            if stop_loss is not None
-            else None
-        ),
-
-        "take_profit": (
-            round(
-                take_profit,
-                6
-            )
-            if take_profit is not None
-            else None
-        ),
-
+        "max_score": max_score,
+        "rsi": rsi_value,
+        "ema20": ema20,
+        "ema50": ema50,
+        "macd": macd_value,
+        "macd_signal": macd_signal,
+        "atr": atr_value,
+        "risk": risk_percent,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
         "reasons": reasons
     }
 
 
 def analyze_market(market):
 
-    candles, error = get_market_candles(
+    result = get_market_candles(
         market,
         interval="1h",
         outputsize=100
     )
 
-    if not candles:
+    if not result["success"]:
+        return result
 
-        return {
-            "success": False,
-            "error": error
-        }
-
-    analysis = calculate_analysis_from_candles(
-        candles
-    )
-
-    if not analysis["success"]:
-
-        return analysis
-
-    analysis["market"] = market
-
-    analysis["timestamp"] = (
-        datetime.utcnow().isoformat()
+    analysis = analyze_candles(
+        result["candles"]
     )
 
     return analysis
-    # ============================================================
-# BACKTEST ENGINE
-# ============================================================
 
-def backtest_market(
-    market,
-    interval="1h",
-    outputsize=500
-):
 
-    candles, error = get_market_candles(
-        market,
-        interval=interval,
-        outputsize=outputsize
-    )
+# =========================================================
+# PAPER TRADING
+# =========================================================
 
-    if not candles:
-
-        return {
-            "success": False,
-            "error": error
-        }
-
-    if len(candles) < 100:
-
-        return {
-            "success": False,
-            "error":
-                "Not enough candles for backtesting."
-        }
-
-    balance = BACKTEST_START_BALANCE
-
-    peak_equity = balance
-    max_drawdown = 0.0
-
-    trades = []
-
-    wins = 0
-    losses = 0
-
-    position = None
-
-    start_index = 60
-
-    for i in range(
-        start_index,
-        len(candles)
-    ):
-
-        historical_candles = candles[
-            :i + 1
-        ]
-
-        analysis = calculate_analysis_from_candles(
-            historical_candles
-        )
-
-        if not analysis["success"]:
-            continue
-
-        candle = candles[i]
-
-        current_price = candle["close"]
-
-        signal = analysis["signal"]
-
-        stop_loss = analysis["stop_loss"]
-        take_profit = analysis["take_profit"]
-
-        # ====================================================
-        # OPEN PAPER LONG POSITION
-        # ====================================================
-
-        if position is None:
-
-            if signal == "BUY":
-
-                amount = min(
-                    BACKTEST_TRADE_AMOUNT,
-                    balance
-                )
-
-                if amount > 0:
-
-                    quantity = (
-                        amount
-                        / current_price
-                    )
-
-                    position = {
-
-                        "side": "LONG",
-
-                        "entry_price":
-                            current_price,
-
-                        "quantity":
-                            quantity,
-
-                        "amount":
-                            amount,
-
-                        "stop_loss":
-                            stop_loss,
-
-                        "take_profit":
-                            take_profit,
-
-                        "entry_time":
-                            candle["datetime"]
-                    }
-
-                    balance -= amount
-
-            # V3 does not open leveraged
-            # short positions.
-            #
-            # SELL signals are used to
-            # exit existing long positions.
-
-        # ====================================================
-        # MANAGE OPEN POSITION
-        # ====================================================
-
-        if position is not None:
-
-            exit_reason = None
-            exit_price = None
-
-            # Stop loss
-            if (
-                candle["low"]
-                <= position["stop_loss"]
-            ):
-
-                exit_price = (
-                    position["stop_loss"]
-                )
-
-                exit_reason = "STOP_LOSS"
-
-            # Take profit
-            elif (
-                candle["high"]
-                >= position["take_profit"]
-            ):
-
-                exit_price = (
-                    position["take_profit"]
-                )
-
-                exit_reason = "TAKE_PROFIT"
-
-            # Strategy exit
-            elif signal == "SELL":
-
-                exit_price = current_price
-
-                exit_reason = "SELL_SIGNAL"
-
-            if exit_price is not None:
-
-                exit_value = (
-                    position["quantity"]
-                    * exit_price
-                )
-
-                profit_loss = (
-                    exit_value
-                    - position["amount"]
-                )
-
-                balance += exit_value
-
-                if profit_loss > 0:
-
-                    wins += 1
-
-                elif profit_loss < 0:
-
-                    losses += 1
-
-                trades.append({
-
-                    "entry_time":
-                        position["entry_time"],
-
-                    "exit_time":
-                        candle["datetime"],
-
-                    "entry_price":
-                        position["entry_price"],
-
-                    "exit_price":
-                        exit_price,
-
-                    "amount":
-                        position["amount"],
-
-                    "profit_loss":
-                        round(
-                            profit_loss,
-                            2
-                        ),
-
-                    "return_percent":
-                        round(
-                            (
-                                profit_loss
-                                / position["amount"]
-                            ) * 100,
-                            2
-                        ),
-
-                    "reason":
-                        exit_reason
-                })
-
-                position = None
-
-        # ====================================================
-        # EQUITY / DRAWDOWN
-        # ====================================================
-
-        if position is not None:
-
-            unrealized_value = (
-                position["quantity"]
-                * current_price
-            )
-
-            equity = (
-                balance
-                + unrealized_value
-            )
-
-        else:
-
-            equity = balance
-
-        if equity > peak_equity:
-
-            peak_equity = equity
-
-        if peak_equity > 0:
-
-            drawdown = (
-                (
-                    peak_equity
-                    - equity
-                )
-                / peak_equity
-            ) * 100
-
-            max_drawdown = max(
-                max_drawdown,
-                drawdown
-            )
-
-    # ========================================================
-    # CLOSE ANY REMAINING POSITION
-    # ========================================================
-
-    if position is not None:
-
-        final_price = candles[-1]["close"]
-
-        exit_value = (
-            position["quantity"]
-            * final_price
-        )
-
-        profit_loss = (
-            exit_value
-            - position["amount"]
-        )
-
-        balance += exit_value
-
-        if profit_loss > 0:
-
-            wins += 1
-
-        elif profit_loss < 0:
-
-            losses += 1
-
-        trades.append({
-
-            "entry_time":
-                position["entry_time"],
-
-            "exit_time":
-                candles[-1]["datetime"],
-
-            "entry_price":
-                position["entry_price"],
-
-            "exit_price":
-                final_price,
-
-            "amount":
-                position["amount"],
-
-            "profit_loss":
-                round(
-                    profit_loss,
-                    2
-                ),
-
-            "return_percent":
-                round(
-                    (
-                        profit_loss
-                        / position["amount"]
-                    ) * 100,
-                    2
-                ),
-
-            "reason":
-                "BACKTEST_END"
-        })
-
-        position = None
-
-    # ========================================================
-    # RESULTS
-    # ========================================================
-
-    final_balance = balance
-
-    total_profit = (
-        final_balance
-        - BACKTEST_START_BALANCE
-    )
-
-    total_trades = len(trades)
-
-    if total_trades > 0:
-
-        win_rate = (
-            wins
-            / total_trades
-        ) * 100
-
-        average_trade = (
-            total_profit
-            / total_trades
-        )
-
-    else:
-
-        win_rate = 0
-        average_trade = 0
-
-    return {
-
-        "success": True,
-
-        "market": market,
-
-        "interval": interval,
-
-        "candles_tested":
-            len(candles),
-
-        "starting_balance":
-            round(
-                BACKTEST_START_BALANCE,
-                2
-            ),
-
-        "final_balance":
-            round(
-                final_balance,
-                2
-            ),
-
-        "profit":
-            round(
-                total_profit,
-                2
-            ),
-
-        "return_percent":
-            round(
-                (
-                    total_profit
-                    / BACKTEST_START_BALANCE
-                ) * 100,
-                2
-            ),
-
-        "total_trades":
-            total_trades,
-
-        "winning_trades":
-            wins,
-
-        "losing_trades":
-            losses,
-
-        "win_rate":
-            round(
-                win_rate,
-                2
-            ),
-
-        "average_trade":
-            round(
-                average_trade,
-                2
-            ),
-
-        "max_drawdown_percent":
-            round(
-                max_drawdown,
-                2
-            ),
-
-        "trades":
-            trades
-    }
-
-
-# ============================================================
-# PORTFOLIO
-# ============================================================
-
-def get_portfolio():
+def get_balance():
 
     connection = get_db()
 
-    portfolio = connection.execute(
+    row = connection.execute(
         """
-        SELECT *
-        FROM portfolio
+        SELECT balance
+        FROM account
         WHERE id = 1
         """
     ).fetchone()
 
     connection.close()
 
-    return dict(portfolio)
+    if row is None:
+        return STARTING_BALANCE
+
+    return float(row["balance"])
 
 
-# ============================================================
-# HOME
-# ============================================================
+def update_balance(amount):
+
+    connection = get_db()
+
+    connection.execute(
+        """
+        UPDATE account
+        SET balance = balance + ?
+        WHERE id = 1
+        """,
+        (amount,)
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def get_position(market):
+
+    connection = get_db()
+
+    row = connection.execute(
+        """
+        SELECT *
+        FROM positions
+        WHERE market = ?
+        """,
+        (market,)
+    ).fetchone()
+
+    connection.close()
+
+    if row is None:
+        return None
+
+    return dict(row)
+
+
+def paper_buy(market, price):
+
+    existing = get_position(market)
+
+    if existing:
+        return {
+            "success": False,
+            "message": "A paper position already exists."
+        }
+
+    balance = get_balance()
+
+    if balance < TRADE_AMOUNT:
+        return {
+            "success": False,
+            "message": "Insufficient paper balance."
+        }
+
+    quantity = (
+        TRADE_AMOUNT /
+        price
+    )
+
+    now = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    connection = get_db()
+
+    connection.execute(
+        """
+        UPDATE account
+        SET balance = balance - ?
+        WHERE id = 1
+        """,
+        (TRADE_AMOUNT,)
+    )
+
+    connection.execute(
+        """
+        INSERT INTO positions
+        (
+            market,
+            quantity,
+            entry_price,
+            invested,
+            opened_at
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            market,
+            quantity,
+            price,
+            TRADE_AMOUNT,
+            now
+        )
+    )
+
+    connection.execute(
+        """
+        INSERT INTO trades
+        (
+            market,
+            side,
+            quantity,
+            price,
+            value,
+            pnl,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            market,
+            "BUY",
+            quantity,
+            price,
+            TRADE_AMOUNT,
+            0,
+            now
+        )
+    )
+
+    connection.commit()
+    connection.close()
+
+    return {
+        "success": True,
+        "message": "Paper BUY opened.",
+        "quantity": quantity
+    }
+
+
+def paper_sell(market, price):
+
+    position = get_position(market)
+
+    if not position:
+        return {
+            "success": False,
+            "message": "No paper position to sell."
+        }
+
+    quantity = float(
+        position["quantity"]
+    )
+
+    invested = float(
+        position["invested"]
+    )
+
+    sale_value = (
+        quantity *
+        price
+    )
+
+    pnl = (
+        sale_value -
+        invested
+    )
+
+    now = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+    connection = get_db()
+
+    connection.execute(
+        """
+        UPDATE account
+        SET balance = balance + ?
+        WHERE id = 1
+        """,
+        (sale_value,)
+    )
+
+    connection.execute(
+        """
+        DELETE FROM positions
+        WHERE market = ?
+        """,
+        (market,)
+    )
+
+    connection.execute(
+        """
+        INSERT INTO trades
+        (
+            market,
+            side,
+            quantity,
+            price,
+            value,
+            pnl,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            market,
+            "SELL",
+            quantity,
+            price,
+            sale_value,
+            pnl,
+            now
+        )
+    )
+
+    connection.commit()
+    connection.close()
+
+    return {
+        "success": True,
+        "message": "Paper SELL completed.",
+        "pnl": pnl
+    }
+
+
+# =========================================================
+# PORTFOLIO
+# =========================================================
+
+def get_portfolio():
+
+    balance = get_balance()
+
+    connection = get_db()
+
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM positions
+        ORDER BY id DESC
+        """
+    ).fetchall()
+
+    connection.close()
+
+    positions = []
+
+    total_position_value = 0.0
+
+    for row in rows:
+
+        market = row["market"]
+
+        price = get_market_price(
+            market
+        )
+
+        if price is None:
+            price = row["entry_price"]
+
+        quantity = float(
+            row["quantity"]
+        )
+
+        entry_price = float(
+            row["entry_price"]
+        )
+
+        current_value = (
+            quantity *
+            price
+        )
+
+        unrealized_pnl = (
+            current_value -
+            float(row["invested"])
+        )
+
+        total_position_value += (
+            current_value
+        )
+
+        positions.append({
+            "market": market,
+            "quantity": quantity,
+            "entry_price": entry_price,
+            "current_price": price,
+            "value": current_value,
+            "pnl": unrealized_pnl,
+            "opened_at": row["opened_at"]
+        })
+
+    total_equity = (
+        balance +
+        total_position_value
+    )
+
+    return {
+        "balance": balance,
+        "position_value": total_position_value,
+        "equity": total_equity,
+        "starting_balance": STARTING_BALANCE,
+        "profit": (
+            total_equity -
+            STARTING_BALANCE
+        ),
+        "positions": positions
+    }
+
+
+# =========================================================
+# BACKTEST
+# =========================================================
+
+def backtest_market(
+    market,
+    interval="1h",
+    outputsize=200
+):
+
+    result = get_market_candles(
+        market,
+        interval=interval,
+        outputsize=outputsize
+    )
+
+    if not result["success"]:
+        return result
+
+    candles = result["candles"]
+
+    if len(candles) < 60:
+        return {
+            "success": False,
+            "error": "Not enough candles for backtesting."
+        }
+
+    cash = STARTING_BALANCE
+
+    position = None
+
+    trades = []
+
+    equity_curve = []
+
+    for index in range(
+        50,
+        len(candles)
+    ):
+
+        history = candles[
+            :index + 1
+        ]
+
+        analysis = analyze_candles(
+            history
+        )
+
+        if not analysis["success"]:
+            continue
+
+        price = candles[index]["close"]
+
+        signal = analysis["signal"]
+
+        if (
+            signal == "BUY"
+            and position is None
+            and cash >= TRADE_AMOUNT
+        ):
+
+            quantity = (
+                TRADE_AMOUNT /
+                price
+            )
+
+            cash -= TRADE_AMOUNT
+
+            position = {
+                "quantity": quantity,
+                "entry": price
+            }
+
+            trades.append({
+                "side": "BUY",
+                "price": price
+            })
+
+        elif (
+            signal == "SELL"
+            and position is not None
+        ):
+
+            sale_value = (
+                position["quantity"] *
+                price
+            )
+
+            pnl = (
+                sale_value -
+                TRADE_AMOUNT
+            )
+
+            cash += sale_value
+
+            trades.append({
+                "side": "SELL",
+                "price": price,
+                "pnl": pnl
+            })
+
+            position = None
+
+        position_value = 0
+
+        if position is not None:
+
+            position_value = (
+                position["quantity"] *
+                price
+            )
+
+        equity = (
+            cash +
+            position_value
+        )
+
+        equity_curve.append(
+            equity
+        )
+
+    final_price = candles[-1]["close"]
+
+    if position is not None:
+
+        final_value = (
+            position["quantity"] *
+            final_price
+        )
+
+        cash += final_value
+
+        pnl = (
+            final_value -
+            TRADE_AMOUNT
+        )
+
+        trades.append({
+            "side": "FINAL_SELL",
+            "price": final_price,
+            "pnl": pnl
+        })
+
+    final_balance = cash
+
+    total_return = (
+        (
+            final_balance -
+            STARTING_BALANCE
+        )
+        /
+        STARTING_BALANCE
+    ) * 100
+
+    winning_trades = 0
+    losing_trades = 0
+
+    for trade in trades:
+
+        if "pnl" not in trade:
+            continue
+
+        if trade["pnl"] > 0:
+            winning_trades += 1
+
+        elif trade["pnl"] < 0:
+            losing_trades += 1
+
+    closed_trades = (
+        winning_trades +
+        losing_trades
+    )
+
+    if closed_trades > 0:
+
+        win_rate = (
+            winning_trades /
+            closed_trades
+        ) * 100
+
+    else:
+
+        win_rate = 0
+
+    return {
+        "success": True,
+        "market": market,
+        "interval": interval,
+        "candles": len(candles),
+        "starting_balance": STARTING_BALANCE,
+        "ending_balance": final_balance,
+        "return_percent": total_return,
+        "trades": len(trades),
+        "winning_trades": winning_trades,
+        "losing_trades": losing_trades,
+        "win_rate": win_rate,
+        "note": (
+            "Paper backtest only. "
+            "Fees, spread and slippage "
+            "are not included."
+        )
+    }
+
+
+# =========================================================
+# WEB PAGE
+# =========================================================
 
 @app.route("/")
 def home():
 
-    selected_market = request.args.get(
+    market = request.args.get(
         "market",
         "BTC/USD"
     )
 
-    if selected_market not in MARKETS:
-
-        selected_market = "BTC/USD"
-
-    analysis = analyze_market(
-        selected_market
-    )
+    if market not in MARKETS:
+        market = "BTC/USD"
 
     portfolio = get_portfolio()
 
-    if analysis["success"]:
-
-        price = analysis["price"]
-        signal = analysis["signal"]
-
-    else:
-
-        price = None
-        signal = "NO DATA"
-
     return render_template(
         "dashboard.html",
-
-        price=price,
-
-        usdt=round(
-            portfolio["usdt"],
-            2
-        ),
-
-        btc=round(
-            portfolio["btc"],
-            8
-        ),
-
-        portfolio=portfolio,
-
-        signal=signal,
-
-        market=selected_market,
-
-        markets=MARKETS,
-
-        stop_loss=STOP_LOSS_ATR,
-
-        take_profit=TAKE_PROFIT_ATR,
-
-        analysis=analysis
+        market=market,
+        portfolio=portfolio
     )
 
 
-# ============================================================
-# AI TRADER / ANALYSIS
-# ============================================================
+# =========================================================
+# API: RUN TRADEMIND
+# =========================================================
+
 @app.route(
     "/api/run",
     methods=["POST"]
@@ -1310,14 +1202,18 @@ def run_bot():
     )
 
     if market not in MARKETS:
+
         return jsonify({
             "success": False,
             "error": "Unsupported market."
         }), 400
 
-    analysis = analyze_market(market)
+    analysis = analyze_market(
+        market
+    )
 
     if not analysis["success"]:
+
         return jsonify({
             "success": False,
             "error": analysis.get(
@@ -1344,11 +1240,16 @@ def run_bot():
         "take_profit": analysis["take_profit"],
         "reasons": analysis["reasons"],
         "message": (
+            "TradeMind analysis completed. "
             "Paper trading only. "
             "No real order was placed."
         )
     })
 
+
+# =========================================================
+# API: BACKTEST
+# =========================================================
 
 @app.route(
     "/api/backtest",
@@ -1357,10 +1258,13 @@ def run_bot():
 def run_backtest():
 
     if request.method == "POST":
+
         data = request.get_json(
             silent=True
         ) or {}
+
     else:
+
         data = request.args
 
     market = data.get(
@@ -1374,17 +1278,20 @@ def run_backtest():
     )
 
     try:
+
         outputsize = int(
             data.get(
                 "outputsize",
-                BACKTEST_MAX_CANDLES
+                200
             )
         )
+
     except (
         TypeError,
         ValueError
     ):
-        outputsize = BACKTEST_MAX_CANDLES
+
+        outputsize = 200
 
     outputsize = max(
         100,
@@ -1395,6 +1302,7 @@ def run_backtest():
     )
 
     if market not in MARKETS:
+
         return jsonify({
             "success": False,
             "error": "Unsupported market."
@@ -1402,15 +1310,20 @@ def run_backtest():
 
     result = backtest_market(
         market,
-        interval=interval,
-        outputsize=outputsize
+        interval,
+        outputsize
     )
 
     if not result["success"]:
+
         return jsonify(result), 503
 
     return jsonify(result)
 
+
+# =========================================================
+# API: MARKETS
+# =========================================================
 
 @app.route("/api/markets")
 def markets_api():
@@ -1421,6 +1334,10 @@ def markets_api():
     })
 
 
+# =========================================================
+# API: PRICE
+# =========================================================
+
 @app.route("/api/price")
 def price_api():
 
@@ -1430,14 +1347,18 @@ def price_api():
     )
 
     if market not in MARKETS:
+
         return jsonify({
             "success": False,
             "error": "Unsupported market."
         }), 400
 
-    price = get_market_price(market)
+    price = get_market_price(
+        market
+    )
 
     if price is None:
+
         return jsonify({
             "success": False,
             "error": "Market price unavailable."
@@ -1450,6 +1371,10 @@ def price_api():
     })
 
 
+# =========================================================
+# API: ANALYSIS
+# =========================================================
+
 @app.route("/api/analysis")
 def analysis_api():
 
@@ -1459,18 +1384,30 @@ def analysis_api():
     )
 
     if market not in MARKETS:
+
         return jsonify({
             "success": False,
             "error": "Unsupported market."
         }), 400
 
-    analysis = analyze_market(market)
+    analysis = analyze_market(
+        market
+    )
 
     if not analysis["success"]:
-        return jsonify(analysis), 503
 
-    return jsonify(analysis)
+        return jsonify(
+            analysis
+        ), 503
 
+    return jsonify(
+        analysis
+    )
+
+
+# =========================================================
+# API: PORTFOLIO
+# =========================================================
 
 @app.route("/api/portfolio")
 def portfolio_api():
@@ -1480,6 +1417,10 @@ def portfolio_api():
         "portfolio": get_portfolio()
     })
 
+
+# =========================================================
+# API: TRADES
+# =========================================================
 
 @app.route("/api/trades")
 def trades_api():
@@ -1506,20 +1447,30 @@ def trades_api():
     })
 
 
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
 @app.route("/health")
 def health():
 
     return jsonify({
         "status": "ok",
         "app": "TradeMind",
-        "mode": "PAPER"
+        "mode": "PAPER",
+        "version": "3.0"
     })
 
+
+# =========================================================
+# STARTUP
+# =========================================================
 
 initialize_database()
 
 
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=int(
@@ -1529,4 +1480,4 @@ if __name__ == "__main__":
             )
         ),
         debug=False
-    )=
+    )
