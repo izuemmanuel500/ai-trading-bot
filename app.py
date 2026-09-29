@@ -440,23 +440,26 @@ def analyze_market(market):
         else:
             risk_level = "LOW"
 
+    # Always provide reference protection levels.
+    # For HOLD, these are neutral reference levels only;
+    # they are NOT an instruction to open a trade.
     stop_loss = None
     take_profit = None
 
     if current_atr is not None:
-        if signal == "BUY":
-            stop_loss = price - (
-                current_atr * STOP_LOSS_ATR_MULTIPLIER
-            )
-            take_profit = price + (
-                current_atr * TAKE_PROFIT_ATR_MULTIPLIER
-            )
-
-        elif signal == "SELL":
+        if signal == "SELL":
             stop_loss = price + (
                 current_atr * STOP_LOSS_ATR_MULTIPLIER
             )
             take_profit = price - (
+                current_atr * TAKE_PROFIT_ATR_MULTIPLIER
+            )
+        else:
+            # BUY and HOLD use long-side reference levels.
+            stop_loss = price - (
+                current_atr * STOP_LOSS_ATR_MULTIPLIER
+            )
+            take_profit = price + (
                 current_atr * TAKE_PROFIT_ATR_MULTIPLIER
             )
 
@@ -491,6 +494,7 @@ def analyze_market(market):
         "take_profit": take_profit,
         "reasons": reasons,
         "message": message,
+        "explanation": " | ".join(reasons),
         "paper_only": True
     }
 
@@ -864,4 +868,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "5000")),
         debug=False
 )
-    
