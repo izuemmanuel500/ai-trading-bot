@@ -257,7 +257,39 @@ def get_market_price(market):
     return float(candles[-1]["close"])
 
 
-def analyze_market(market):
+def get_market_price(market):
+    if not TWELVE_DATA_API_KEY:
+        raise RuntimeError(
+            "TWELVE_DATA_API_KEY is not configured on Render."
+        )
+
+    response = requests.get(
+        f"{TWELVE_DATA_URL}/price",
+        params={
+            "symbol": market,
+            "apikey": TWELVE_DATA_API_KEY
+        },
+        timeout=20
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    if data.get("status") == "error":
+        raise RuntimeError(
+            data.get(
+                "message",
+                "Twelve Data returned a price error."
+            )
+        )
+
+    if "price" not in data:
+        raise RuntimeError(
+            "Twelve Data did not return a price."
+        )
+
+    return float(data["price"])
     candles = get_candles(market)
 
     closes = [float(c["close"]) for c in candles]
