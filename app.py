@@ -5,70 +5,41 @@ from datetime import datetime, timezone
 import requests
 from flask import Flask, jsonify, render_template, request
 
+
 app = Flask(__name__)
 
+
 # ============================================================
-# TradeMind V3 - PAPER TRADING ONLY
+# SETTINGS
 # ============================================================
 
 DATABASE = "trading.db"
 
-STARTING_BALANCE = 1000.00
-TRADE_AMOUNT = 50.00
-
-STOP_LOSS_ATR_MULTIPLIER = 1.5
-TAKE_PROFIT_ATR_MULTIPLIER = 2.5
-
-TWELVE_DATA_API_KEY = os.getenv(
-    "TWELVE_DATA_API_KEY",
-    ""
-).strip()
+STARTING_BALANCE = 1000.0
+TRADE_AMOUNT = 50.0
 
 TWELVE_DATA_URL = "https://api.twelvedata.com"
 
 
+MARKETS = {
+    "BTC/USD": "Bitcoin — BTC/USD",
+    "ETH/USD": "Ethereum — ETH/USD",
+    "EUR/USD": "Euro / US Dollar — EUR/USD",
+    "GBP/USD": "British Pound / US Dollar — GBP/USD",
+    "USD/JPY": "US Dollar / Japanese Yen — USD/JPY",
+    "GBP/JPY": "British Pound / Japanese Yen — GBP/JPY",
+    "XAU/USD": "Gold — XAU/USD",
+    "XAG/USD": "Silver — XAG/USD",
+    "WTI/USD": "WTI Crude Oil — WTI/USD"
+}
+
+
 # ============================================================
-# SUPPORTED MARKETS
+# TIME
 # ============================================================
 
-MARKETS = {
-    "BTC/USD": {
-        "name": "Bitcoin",
-        "symbol": "BTC/USD"
-    },
-    "ETH/USD": {
-        "name": "Ethereum",
-        "symbol": "ETH/USD"
-    },
-    "EUR/USD": {
-        "name": "Euro / US Dollar",
-        "symbol": "EUR/USD"
-    },
-    "GBP/USD": {
-        "name": "British Pound / US Dollar",
-        "symbol": "GBP/USD"
-    },
-    "USD/JPY": {
-        "name": "US Dollar / Japanese Yen",
-        "symbol": "USD/JPY"
-    },
-    "GBP/JPY": {
-        "name": "British Pound / Japanese Yen",
-        "symbol": "GBP/JPY"
-    },
-    "XAU/USD": {
-        "name": "Gold",
-        "symbol": "XAU/USD"
-    },
-    "XAG/USD": {
-        "name": "Silver",
-        "symbol": "XAG/USD"
-    },
-    "WTI/USD": {
-        "name": "WTI Crude Oil",
-        "symbol": "WTI/USD"
-    }
-}
+def now():
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ============================================================
@@ -81,13 +52,13 @@ def db():
     return conn
 
 
-def initialize_database():
+def init_db():
     conn = db()
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS account (
             id INTEGER PRIMARY KEY CHECK (id = 1),
-            balance REAL NOT NULL
+            cash REAL NOT NULL
         )
     """)
 
@@ -104,12 +75,10 @@ def initialize_database():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             market TEXT NOT NULL,
             side TEXT NOT NULL,
-            quantity REAL NOT NULL,
             price REAL NOT NULL,
-            value REAL NOT NULL,
+            quantity REAL NOT NULL,
             pnl REAL DEFAULT 0,
-            signal TEXT DEFAULT '',
-            created_at TEXT NOT NULL
+            timestamp TEXT NOT NULL
         )
     """)
 
@@ -117,12 +86,9 @@ def initialize_database():
         "SELECT id FROM account WHERE id = 1"
     ).fetchone()
 
-    if not account:
+    if account is None:
         conn.execute(
-            """
-            INSERT INTO account (id, balance)
-            VALUES (1, ?)
-            """,
+            "INSERT INTO account (id, cash) VALUES (1, ?)",
             (STARTING_BALANCE,)
         )
 
@@ -131,42 +97,478 @@ def initialize_database():
 
 
 # ============================================================
-# ACCOUNT
+# TWELVE DATA API
 # ============================================================
 
-def get_balance():
-    conn = db()
+def api_key():
+    key = os.getenv("TWELVE_DATA_API_KEY")
 
-    row = conn.execute(
-        """
-        SELECT balance
-        FROM account
-        WHERE id = 1
-        """
-    ).fetchone()
+    if not key:
+        raise RuntimeError(
+            "TWELVE_DATA_API_KEY is not configured on Render."
+        )
 
-    conn.close()
-
-    if row:
-        return float(row["balance"])
-
-    return STARTING_BALANCE
+    return key
 
 
-def set_balance(value):
-    conn = db()
+def twelve_get(path, params):
+    params = dict(params)
+    params["apikey"] = api_key()
 
-    conn.execute(
-        """
-        UPDATE account
-        SET balance = ?
-        WHERE id = 1
-        """,
-        (float(value),)
+    response = requests.get(
+        TWELVE_DATA_URL + path,
+        params=params,
+        timeout=20
     )
 
-    conn.commit()
-    conn.close()
+    response.raise_for_status()
+
+    data = response.json()
+
+    if data.get("status") == "error":
+        raise RuntimeError(
+            data.get(
+                "message",
+                "Twelve Data error"
+            )
+        )
+
+    return data
+
+
+def get_candles(
+    market,
+    interval="1h",
+    outputsize=120
+):
+    data = twelve_get(
+        "/time_series",
+        {
+            "symbol": market,
+            "interval": interval,
+            "outputsize": outputsize,
+            "format": "JSON"
+        }
+    )
+
+    values = data.get("values") or []
+
+    if len(values) < 30:
+        raise RuntimeError(
+            "Not enough market data returned."
+        )
+
+    return list(reversed(values))
+
+
+def get_market_price(market):
+    data = twelve_get(
+        "/price",
+        {
+            "symbol": market
+        }
+    )
+
+    price = float(data["price"])
+
+    if price <= 0:
+        raise RuntimeError(
+            "Invalid market price."
+        )
+
+    return price
+
+
+# ============================================================
+# PRICE DATA
+# ============================================================
+
+def closes(candles):
+    return [
+        float(item["close"])
+        for item in candles
+    ]
+
+
+# ============================================================
+# EMA
+# ============================================================
+
+def ema(values, period):
+    if len(values) < period:
+        return values[-1]
+
+    value = (
+        sum(values[:period]) /
+        period
+    )
+
+    multiplier = 2.0 / (
+        period + 1
+    )
+
+    for price in values[period:]:
+        value = (
+            (price - value) *
+            multiplier
+        ) + value
+
+    return value
+
+
+# ============================================================
+# RSI
+# ============================================================
+
+def rsi(values, period=14):
+    if len(values) <= period:
+        return 50.0
+
+    gains = []
+    losses = []
+
+    for i in range(1, period + 1):
+        change = (
+            values[i] -
+            values[i - 1]
+        )
+
+        gains.append(
+            max(change, 0)
+        )
+
+        losses.append(
+            max(-change, 0)
+        )
+
+    avg_gain = (
+        sum(gains) /
+        period
+    )
+
+    avg_loss = (
+        sum(losses) /
+        period
+    )
+
+    for i in range(
+        period + 1,
+        len(values)
+    ):
+        change = (
+            values[i] -
+            values[i - 1]
+        )
+
+        gain = max(
+            change,
+            0
+        )
+
+        loss = max(
+            -change,
+            0
+        )
+
+        avg_gain = (
+            (
+                avg_gain *
+                (period - 1)
+            ) + gain
+        ) / period
+
+        avg_loss = (
+            (
+                avg_loss *
+                (period - 1)
+            ) + loss
+        ) / period
+
+    if avg_loss == 0:
+        return 100.0
+
+    rs = avg_gain / avg_loss
+
+    return 100.0 - (
+        100.0 /
+        (1.0 + rs)
+    )
+
+
+# ============================================================
+# MACD
+# ============================================================
+
+def macd(values):
+    fast = ema(
+        values,
+        12
+    )
+
+    slow = ema(
+        values,
+        26
+    )
+
+    line = fast - slow
+
+    macd_values = []
+
+    for i in range(
+        26,
+        len(values) + 1
+    ):
+        part = values[:i]
+
+        macd_values.append(
+            ema(part, 12) -
+            ema(part, 26)
+        )
+
+    if macd_values:
+        signal = ema(
+            macd_values,
+            9
+        )
+    else:
+        signal = 0.0
+
+    return line, signal
+
+
+# ============================================================
+# ATR
+# ============================================================
+
+def atr(candles, period=14):
+    if len(candles) < 2:
+        return 0.0
+
+    true_ranges = []
+
+    for i in range(
+        1,
+        len(candles)
+    ):
+        high = float(
+            candles[i]["high"]
+        )
+
+        low = float(
+            candles[i]["low"]
+        )
+
+        previous_close = float(
+            candles[i - 1]["close"]
+        )
+
+        current_range = max(
+            high - low,
+            abs(
+                high -
+                previous_close
+            ),
+            abs(
+                low -
+                previous_close
+            )
+        )
+
+        true_ranges.append(
+            current_range
+        )
+
+    if not true_ranges:
+        return 0.0
+
+    recent = true_ranges[-period:]
+
+    return (
+        sum(recent) /
+        len(recent)
+    )
+
+
+# ============================================================
+# AI MARKET ANALYSIS
+# ============================================================
+
+def analyze_market(market):
+    candles = get_candles(
+        market
+    )
+
+    values = closes(
+        candles
+    )
+
+    price = values[-1]
+
+    fast = ema(
+        values,
+        9
+    )
+
+    slow = ema(
+        values,
+        21
+    )
+
+    rsi_value = rsi(
+        values
+    )
+
+    macd_value, macd_signal = macd(
+        values
+    )
+
+    atr_value = atr(
+        candles
+    )
+
+    score = 0
+    reasons = []
+
+
+    # EMA
+    if fast > slow:
+        score += 1
+
+        reasons.append(
+            "EMA trend is bullish"
+        )
+
+    elif fast < slow:
+        score -= 1
+
+        reasons.append(
+            "EMA trend is bearish"
+        )
+
+    else:
+        reasons.append(
+            "EMA trend is neutral"
+        )
+
+
+    # RSI
+    if rsi_value < 30:
+        score += 1
+
+        reasons.append(
+            "RSI is oversold"
+        )
+
+    elif rsi_value > 70:
+        score -= 1
+
+        reasons.append(
+            "RSI is overbought"
+        )
+
+    else:
+        reasons.append(
+            "RSI is neutral"
+        )
+
+
+    # MACD
+    if macd_value > macd_signal:
+        score += 1
+
+        reasons.append(
+            "MACD momentum is bullish"
+        )
+
+    elif macd_value < macd_signal:
+        score -= 1
+
+        reasons.append(
+            "MACD momentum is bearish"
+        )
+
+    else:
+        reasons.append(
+            "MACD momentum is neutral"
+        )
+
+
+    # SIGNAL
+    if score >= 2:
+        signal = "BUY"
+        strength = "BULLISH"
+
+    elif score <= -2:
+        signal = "SELL"
+        strength = "BEARISH"
+
+    else:
+        signal = "HOLD"
+        strength = "NEUTRAL"
+
+
+    # CONFIDENCE
+    confidence = 40 + (
+        abs(score) * 15
+    )
+
+    if confidence > 85:
+        confidence = 85
+
+
+    # RISK
+    risk = "LOW"
+
+    if atr_value > (
+        price * 0.02
+    ):
+        risk = "HIGH"
+
+    elif atr_value > (
+        price * 0.01
+    ):
+        risk = "MEDIUM"
+
+
+    # STOP LOSS
+    stop_loss = price - (
+        1.5 * atr_value
+    )
+
+
+    # TAKE PROFIT
+    take_profit = price + (
+        2.5 * atr_value
+    )
+
+
+    return {
+        "market": market,
+        "price": price,
+        "signal": signal,
+        "confidence": confidence,
+        "market_strength": strength,
+        "risk_level": risk,
+        "ema_fast": fast,
+        "ema_slow": slow,
+        "rsi": rsi_value,
+        "macd": macd_value,
+        "macd_signal": macd_signal,
+        "atr": atr_value,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "score": score,
+        "reasons": reasons,
+        "explanation": " | ".join(
+            reasons
+        ),
+        "message": (
+            " | ".join(reasons) +
+            ". This is a "
+            "paper-trading signal only."
+        ),
+        "paper_only": True
+    }
 
 
 # ============================================================
@@ -187,7 +589,7 @@ def get_position(market):
 
     conn.close()
 
-    return dict(row) if row else None
+    return row
 
 
 def get_all_positions():
@@ -203,23 +605,153 @@ def get_all_positions():
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    return rows
 
 
 # ============================================================
-# TRADES
+# PORTFOLIO
 # ============================================================
 
-def record_trade(
+def get_portfolio():
+    conn = db()
+
+    account = conn.execute(
+        """
+        SELECT cash
+        FROM account
+        WHERE id = 1
+        """
+    ).fetchone()
+
+    positions = conn.execute(
+        """
+        SELECT *
+        FROM positions
+        """
+    ).fetchall()
+
+    conn.close()
+
+    cash = float(
+        account["cash"]
+    )
+
+    holdings = 0.0
+
+    for position in positions:
+        try:
+            price = get_market_price(
+                position["market"]
+            )
+
+        except Exception:
+            price = float(
+                position["avg_price"]
+            )
+
+        holdings += (
+            float(
+                position["quantity"]
+            ) *
+            price
+        )
+
+    return {
+        "cash": cash,
+        "holdings_value": holdings,
+        "total_value": (
+            cash + holdings
+        ),
+        "positions": len(
+            positions
+        ),
+        "paper_only": True
+    }
+
+
+# ============================================================
+# PAPER BUY
+# ============================================================
+
+def execute_buy(
     market,
-    side,
-    quantity,
-    price,
-    value,
-    pnl=0,
-    signal=""
+    price
 ):
     conn = db()
+
+    account = conn.execute(
+        """
+        SELECT cash
+        FROM account
+        WHERE id = 1
+        """
+    ).fetchone()
+
+    cash = float(
+        account["cash"]
+    )
+
+    if cash < TRADE_AMOUNT:
+        conn.close()
+
+        return (
+            False,
+            "Not enough paper cash."
+        )
+
+    existing = conn.execute(
+        """
+        SELECT *
+        FROM positions
+        WHERE market = ?
+        """,
+        (market,)
+    ).fetchone()
+
+    if existing:
+        conn.close()
+
+        return (
+            False,
+            "A paper position "
+            "is already open."
+        )
+
+    quantity = (
+        TRADE_AMOUNT /
+        price
+    )
+
+    new_cash = (
+        cash -
+        TRADE_AMOUNT
+    )
+
+    conn.execute(
+        """
+        UPDATE account
+        SET cash = ?
+        WHERE id = 1
+        """,
+        (new_cash,)
+    )
+
+    conn.execute(
+        """
+        INSERT INTO positions
+        (
+            market,
+            quantity,
+            avg_price
+        )
+        VALUES (?, ?, ?)
+        """,
+        (
+            market,
+            quantity,
+            price
+        )
+    )
 
     conn.execute(
         """
@@ -227,228 +759,80 @@ def record_trade(
         (
             market,
             side,
-            quantity,
             price,
-            value,
+            quantity,
             pnl,
-            signal,
-            created_at
+            timestamp
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, 'BUY', ?, ?, 0, ?)
         """,
         (
             market,
-            side,
-            quantity,
             price,
-            value,
-            pnl,
-            signal,
-            datetime.now(timezone.utc).isoformat()
+            quantity,
+            now()
         )
     )
 
     conn.commit()
     conn.close()
 
+    return (
+        True,
+        "Paper BUY executed."
+    )
 
-def get_trades(limit=50):
+
+# ============================================================
+# PAPER SELL
+# ============================================================
+
+def execute_sell(
+    market,
+    price
+):
     conn = db()
 
-    rows = conn.execute(
+    position = conn.execute(
         """
         SELECT *
-        FROM trades
-        ORDER BY id DESC
-        LIMIT ?
+        FROM positions
+        WHERE market = ?
         """,
-        (limit,)
-    ).fetchall()
+        (market,)
+    ).fetchone()
 
-    conn.close()
+    if position is None:
+        conn.close()
 
-    return [dict(row) for row in rows]
-
-
-# ============================================================
-# MARKET DATA
-# ============================================================
-
-def get_candles(
-    market,
-    interval="1h",
-    outputsize=100
-):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError(
-            "TWELVE_DATA_API_KEY is not configured on Render."
+        return (
+            False,
+            "No paper position "
+            "is open."
         )
 
-    response = requests.get(
-        f"{TWELVE_DATA_URL}/time_series",
-        params={
-            "symbol": market,
-            "interval": interval,
-            "outputsize": outputsize,
-            "apikey": TWELVE_DATA_API_KEY,
-            "format": "JSON"
-        },
-        timeout=20
+    quantity = float(
+        position["quantity"]
     )
 
-    response.raise_for_status()
-
-    data = response.json()
-
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get(
-                "message",
-                "Twelve Data returned an error."
-            )
-        )
-
-    values = data.get("values")
-
-    if not values:
-        raise RuntimeError(
-            "No market data was returned."
-        )
-
-    return list(reversed(values))
-
-
-def get_market_price(market):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError(
-            "TWELVE_DATA_API_KEY is not configured on Render."
-        )
-
-    response = requests.get(
-        f"{TWELVE_DATA_URL}/price",
-        params={
-            "symbol": market,
-            "apikey": TWELVE_DATA_API_KEY
-        },
-        timeout=20
+    avg_price = float(
+        position["avg_price"]
     )
 
-    response.raise_for_status()
-
-    data = response.json()
-
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get(
-                "message",
-                "Twelve Data returned a price error."
-            )
-        )
-
-    if "price" not in data:
-        raise RuntimeError(
-            "Twelve Data did not return a price."
-        )
-
-    return float(data["price"])
-
-
-# ============================================================
-# INDICATORS
-# ============================================================
-
-def ema(values, period):
-    if len(values) < period:
-        return None
-
-    multiplier = 2 / (period + 1)
-
-    result = sum(values[:period]) / period
-
-    for price in values[period:]:
-        result = (
-            (price - result) * multiplier
-        ) + result
-
-    return result
-
-
-def rsi(values, period=14):
-    if len(values) <= period:
-        return None
-
-    gains = []
-    losses = []
-
-    for i in range(1, len(values)):
-        change = values[i] - values[i - 1]
-
-        gains.append(max(change, 0))
-        losses.append(max(-change, 0))
-
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
-
-    for i in range(period, len(gains)):
-        avg_gain = (
-            (avg_gain * (period - 1)) +
-            gains[i]
-        ) / period
-
-        avg_loss = (
-            (avg_loss * (period - 1)) +
-            losses[i]
-        ) / period
-
-    if avg_loss == 0:
-        return 100.0
-
-    rs = avg_gain / avg_loss
-
-    return 100 - (
-        100 / (1 + rs)
+    proceeds = (
+        quantity *
+        price
     )
 
+    pnl = (
+        price -
+        avg_price
+    ) * quantity
 
-def macd(values):
-    if len(values) < 35:
-        return None, None
-
-    macd_values = []
-
-    for i in range(26, len(values)):
-        fast = ema(
-            values[:i + 1],
-            12
-        )
-
-        slow = ema(
-            values[:i + 1],
-            26
-        )
-
-        if fast is not None and slow is not None:
-            macd_values.append(
-                fast - slow
-            )
-
-    if not macd_values:
-        return None, None
-
-    current_macd = macd_values[-1]
-
-    signal = ema(
-        macd_values,
-        9
-    )
-
-    return current_macd, signal
-
-
-def atr(candles, period=14):
-    if len(candles) <= period:
-        return None
-
-    true_ranges = []
-
-    for i in range(1, len(candles)):
+    account = conn.execute(
+        """
+        SELECT cash
+        FROM account
+        WHERE id = 1
+        """
+    ).fetchone()
