@@ -2,288 +2,336 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TradeMind AI Trader</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>TradeMind AI Paper Trading</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css', v='3') }}">
 </head>
 
 <body>
-    <header class="topbar">
-        <div class="brand">
-            <div class="brand-icon">TM</div>
-            <div>
-                <h1>TradeMind</h1>
-                <p>AI Paper Trading</p>
-            </div>
+
+<header class="topbar">
+    <div class="brand">
+        <div class="brand-logo">TM</div>
+
+        <div>
+            <h2>TradeMind</h2>
+            <p>AI Paper Trading</p>
+        </div>
+    </div>
+
+    <div class="paper-status">
+        <span class="status-dot"></span>
+        PAPER MODE
+    </div>
+</header>
+
+
+<main class="container">
+
+    <section class="hero">
+        <div class="eyebrow">AI MARKET ANALYSIS</div>
+
+        <h1>Trade smarter.<br>Test safely.</h1>
+
+        <p>
+            Analyze multiple markets with TradeMind's
+            paper-trading engine. No real money is used.
+        </p>
+    </section>
+
+
+    <section class="market-card">
+
+        <div class="market-summary">
+            <strong>{{ selected_market }}</strong>
+
+            <span>
+                ${{ "%.4f"|format(price|default(0, true)) }}
+            </span>
         </div>
 
-        <div class="status-badge">
-            <span class="status-dot"></span>
-            PAPER MODE
-        </div>
-    </header>
+        <label for="marketSelect">
+            Choose market
+        </label>
 
-    <main class="container">
+        <select id="marketSelect"
+                onchange="changeMarket()">
 
-        <section class="hero">
-            <div>
-                <p class="eyebrow">AI MARKET ANALYSIS</p>
-                <h2>Trade smarter. Test safely.</h2>
-                <p class="hero-text">
-                    Analyze multiple markets with TradeMind's paper-trading engine.
-                    No real money is used.
-                </p>
-            </div>
+            {% for symbol, info in markets.items() %}
+                <option value="{{ symbol }}"
+                    {% if symbol == selected_market %}
+                        selected
+                    {% endif %}>
+                    {{ info.name }} — {{ symbol }}
+                </option>
+            {% endfor %}
 
-            <div class="hero-price">
-                <span>{{ selected_market }}</span>
-                <strong>
-                    ${{ "%.4f"|format(price|default(0, true)) }}
-                </strong>
-            </div>
-        </section>
+        </select>
 
-        <section class="control-card">
-            <div class="control-group">
-                <label for="marketSelect">Choose market</label>
-
-                <select id="marketSelect" onchange="changeMarket()">
-                    {% for symbol, info in markets.items() %}
-                        <option value="{{ symbol }}"
-                            {% if symbol == selected_market %}selected{% endif %}>
-                            {{ info.name }} — {{ symbol }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <button
-                id="runBotButton"
+        <button id="runBotButton"
                 class="run-button"
                 onclick="runBot()">
-                🤖 Run AI Trader
-            </button>
-        </section>
+            🤖 Run AI Trader
+        </button>
 
-        <section class="stats-grid">
+    </section>
 
-            <article class="stat-card">
-                <span>Market Price</span>
-                <strong>
-                    ${{ "%.4f"|format(price|default(0, true)) }}
-                </strong>
-                <small>{{ selected_market }}</small>
-            </article>
 
-            <article class="stat-card">
-                <span>Paper Cash</span>
-                <strong>
-                    ${{ "%.2f"|format(portfolio.balance|default(0, true)) }}
-                </strong>
-                <small>Available balance</small>
-            </article>
+    <section class="stats-grid">
 
-            <article class="stat-card">
-                <span>Portfolio Value</span>
-                <strong>
-                    ${{ "%.2f"|format(portfolio.total_value|default(0, true)) }}
-                </strong>
-                <small>Cash + positions</small>
-            </article>
+        <div class="stat-card">
+            <span>Market Price</span>
 
-            <article class="stat-card">
-                <span>Positions</span>
-                <strong>
-                    {{ portfolio.positions|length }}
-                </strong>
-                <small>Open paper positions</small>
-            </article>
+            <strong>
+                ${{ "%.4f"|format(price|default(0, true)) }}
+            </strong>
 
-        </section>
+            <small>{{ selected_market }}</small>
+        </div>
 
-        <section class="dashboard-grid">
 
-            <article class="panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">AI ENGINE</p>
-                        <h3>Current Analysis</h3>
-                    </div>
-                    <span class="live-label">LIVE DATA</span>
-                </div>
+        <div class="stat-card">
+            <span>Paper Cash</span>
 
-                <div class="signal-box">
-                    <div>
-                        <span class="label">Selected market</span>
-                        <strong>{{ selected_market }}</strong>
-                    </div>
+            <strong>
+                ${{ "%.2f"|format(
+                    portfolio.cash|default(1000, true)
+                ) }}
+            </strong>
 
-                    <div>
-                        <span class="label">Current price</span>
-                        <strong>
-                            ${{ "%.4f"|format(price|default(0, true)) }}
-                        </strong>
-                    </div>
+            <small>Available balance</small>
+        </div>
 
-                    <div>
-                        <span class="label">Signal</span>
-                        <strong id="signalValue">READY</strong>
-                    </div>
-                </div>
 
-                <p class="muted">
-                    Press <strong>Run AI Trader</strong> to analyze the selected
-                    market and execute a paper trade when the strategy produces
-                    a BUY or SELL signal.
-                </p>
-            </article>
+        <div class="stat-card">
+            <span>Portfolio Value</span>
 
-            <article class="panel">
-                <div class="panel-header">
-                    <div>
-                        <p class="eyebrow">RISK CONTROL</p>
-                        <h3>Protection</h3>
-                    </div>
-                </div>
+            <strong>
+                ${{ "%.2f"|format(
+                    portfolio.total_value|default(1000, true)
+                ) }}
+            </strong>
 
-                <div class="risk-list">
-                    <div class="risk-item">
-                        <span>Stop Loss</span>
-                        <strong>2%</strong>
-                    </div>
+            <small>Cash + positions</small>
+        </div>
 
-                    <div class="risk-item">
-                        <span>Take Profit</span>
-                        <strong>4%</strong>
-                    </div>
 
-                    <div class="risk-item">
-                        <span>Trade Size</span>
-                        <strong>$50</strong>
-                    </div>
+        <div class="stat-card">
+            <span>Positions</span>
 
-                    <div class="risk-item">
-                        <span>Real Money</span>
-                        <strong>DISABLED</strong>
-                    </div>
-                </div>
-            </article>
+            <strong>
+                {{ portfolio.positions|length }}
+            </strong>
 
-        </section>
+            <small>Open paper positions</small>
+        </div>
 
-        <section class="panel">
-            <div class="panel-header">
-                <div>
-                    <p class="eyebrow">SUPPORTED MARKETS</p>
-                    <h3>Choose a market</h3>
-                </div>
-                <span class="muted">Twelve Data</span>
+    </section>
+
+
+    <section class="section">
+
+        <div class="eyebrow">AI ENGINE</div>
+
+        <h2>Current Analysis</h2>
+
+        <div class="analysis-card">
+
+            <div class="analysis-status">
+                LIVE DATA
             </div>
 
-            <div class="market-grid">
-                {% for symbol, info in markets.items() %}
-                    <button
-                        class="market-card {% if symbol == selected_market %}active{% endif %}"
-                        onclick="selectMarket('{{ symbol }}')">
-                        <span>{{ info.name }}</span>
-                        <strong>{{ symbol }}</strong>
-                    </button>
-                {% endfor %}
-            </div>
-        </section>
-
-        <section class="panel">
-            <div class="panel-header">
-                <div>
-                    <p class="eyebrow">OPEN POSITIONS</p>
-                    <h3>Paper Portfolio</h3>
-                </div>
-            </div>
-
-            {% if portfolio.positions %}
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Market</th>
-                                <th>Quantity</th>
-                                <th>Entry</th>
-                                <th>Current</th>
-                                <th>Value</th>
-                                <th>P/L</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {% for position in portfolio.positions %}
-                                <tr>
-                                    <td>{{ position.market }}</td>
-                                    <td>{{ "%.6f"|format(position.quantity) }}</td>
-                                    <td>${{ "%.4f"|format(position.avg_price) }}</td>
-                                    <td>${{ "%.4f"|format(position.current_price) }}</td>
-                                    <td>${{ "%.2f"|format(position.value) }}</td>
-                                    <td>
-                                        ${{ "%.2f"|format(position.pnl) }}
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <div class="empty-state">
-                    <div class="empty-icon">📊</div>
-                    <h4>No open positions</h4>
-                    <p>
-                        Your paper portfolio is currently holding no positions.
-                    </p>
-                </div>
-            {% endif %}
-        </section>
-
-        <section class="system-grid">
-
-            <article class="system-card">
-                <span class="system-icon">🟢</span>
-                <div>
-                    <strong>System Online</strong>
-                    <p>TradeMind is running normally.</p>
-                </div>
-            </article>
-
-            <article class="system-card">
-                <span class="system-icon">📡</span>
-                <div>
-                    <strong>Market Data</strong>
-                    <p>Twelve Data connection configured.</p>
-                </div>
-            </article>
-
-            <article class="system-card">
-                <span class="system-icon">🛡️</span>
-                <div>
-                    <strong>Paper Trading</strong>
-                    <p>Real-money orders are disabled.</p>
-                </div>
-            </article>
-
-        </section>
-
-        <section class="warning-card">
-            <strong>⚠️ Paper Trading Only</strong>
             <p>
-                TradeMind currently uses simulated money. Signals and backtests
-                are experimental and do not guarantee future results.
+                Selected market
+                <strong>{{ selected_market }}</strong>
             </p>
-        </section>
 
-    </main>
+            <p>
+                Current price
+                <strong>
+                    ${{ "%.4f"|format(
+                        price|default(0, true)
+                    ) }}
+                </strong>
+            </p>
 
-    <footer>
-        <p>TradeMind • AI-assisted paper trading dashboard</p>
-    </footer>
+            <p>
+                Signal
+                <strong>READY</strong>
+            </p>
 
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+            <p class="analysis-note">
+                Press <strong>Run AI Trader</strong> to analyze
+                the selected market and execute a paper trade
+                when the strategy produces a BUY or SELL signal.
+            </p>
+
+        </div>
+
+    </section>
+
+
+    <section class="section">
+
+        <div class="eyebrow">RISK CONTROL</div>
+
+        <h2>Protection</h2>
+
+        <div class="risk-grid">
+
+            <div>
+                <span>Stop Loss</span>
+                <strong>ATR Based</strong>
+            </div>
+
+            <div>
+                <span>Take Profit</span>
+                <strong>ATR Based</strong>
+            </div>
+
+            <div>
+                <span>Trade Size</span>
+                <strong>$50</strong>
+            </div>
+
+            <div>
+                <span>Real Money</span>
+                <strong>DISABLED</strong>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="section">
+
+        <div class="eyebrow">SUPPORTED MARKETS</div>
+
+        <h2>Choose a market</h2>
+
+        <p class="muted">Twelve Data</p>
+
+        <div class="market-buttons">
+
+            {% for symbol, info in markets.items() %}
+
+                <button
+                    type="button"
+                    onclick="selectMarket('{{ symbol }}')">
+
+                    {{ info.name }}
+                    <strong>{{ symbol }}</strong>
+
+                </button>
+
+            {% endfor %}
+
+        </div>
+
+    </section>
+
+
+    <section class="section">
+
+        <div class="eyebrow">OPEN POSITIONS</div>
+
+        <h2>Paper Portfolio</h2>
+
+        {% if portfolio.positions %}
+
+            <div class="positions">
+
+                {% for position in portfolio.positions %}
+
+                    <div class="position-card">
+
+                        <div>
+                            <strong>
+                                {{ position.market }}
+                            </strong>
+
+                            <span>
+                                Qty:
+                                {{ "%.8f"|format(
+                                    position.quantity
+                                ) }}
+                            </span>
+                        </div>
+
+                        <div>
+                            <span>
+                                Entry:
+                                ${{ "%.4f"|format(
+                                    position.avg_price
+                                ) }}
+                            </span>
+
+                            <span>
+                                Current:
+                                ${{ "%.4f"|format(
+                                    position.current_price
+                                ) }}
+                            </span>
+                        </div>
+
+                        <div>
+                            <strong>
+                                Value:
+                                ${{ "%.2f"|format(
+                                    position.value
+                                ) }}
+                            </strong>
+
+                            <span>
+                                P/L:
+                                ${{ "%.2f"|format(
+                                    position.pnl
+                                ) }}
+                            </span>
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div class="empty-state">
+                No open paper positions.
+            </div>
+
+        {% endif %}
+
+    </section>
+
+
+    <section class="warning-card">
+
+        <strong>⚠️ PAPER TRADING ONLY</strong>
+
+        <p>
+            TradeMind currently uses simulated money.
+            No real-money trades are enabled.
+        </p>
+
+    </section>
+
+</main>
+
+
+<script src="{{ url_for(
+    'static',
+    filename='app.js',
+    v='3'
+) }}"></script>
+
 </body>
     </html>
-    
+            
