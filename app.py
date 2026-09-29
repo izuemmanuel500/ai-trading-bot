@@ -16,7 +16,6 @@ DATABASE = "trading.db"
 STARTING_BALANCE = 1000.00
 TRADE_AMOUNT = 50.00
 
-# ATR-based protection
 STOP_LOSS_ATR_MULTIPLIER = 1.5
 TAKE_PROFIT_ATR_MULTIPLIER = 2.5
 
@@ -114,11 +113,11 @@ def initialize_database():
         )
     """)
 
-    existing_account = conn.execute(
+    account = conn.execute(
         "SELECT id FROM account WHERE id = 1"
     ).fetchone()
 
-    if not existing_account:
+    if not account:
         conn.execute(
             """
             INSERT INTO account (id, balance)
@@ -130,6 +129,10 @@ def initialize_database():
     conn.commit()
     conn.close()
 
+
+# ============================================================
+# ACCOUNT
+# ============================================================
 
 def get_balance():
     conn = db()
@@ -166,6 +169,10 @@ def set_balance(value):
     conn.close()
 
 
+# ============================================================
+# POSITIONS
+# ============================================================
+
 def get_position(market):
     conn = db()
 
@@ -198,6 +205,10 @@ def get_all_positions():
 
     return [dict(row) for row in rows]
 
+
+# ============================================================
+# TRADES
+# ============================================================
 
 def record_trade(
     market,
@@ -260,106 +271,86 @@ def get_trades(limit=50):
 
 
 # ============================================================
-# PERFORMANCE
+# MARKET DATA
 # ============================================================
 
-def get_performance():
-    conn = db()
-
-    rows = conn.execute(
-        """
-        SELECT pnl
-        FROM trades
-        WHERE side = 'SELL'
-        ORDER BY id ASC
-        """
-    ).fetchall()
-
-    conn.close()
-
-    realized_pnl = sum(
-        float(row["pnl"] or 0)
-        for row in rows
-    )
-
-    winning_trades = sum(
-        1
-        for row in rows
-        if float(row["pnl"] or 0) > 0
-    )
-
-    losing_trades = sum(
-        1
-        for row in rows
-        if float(row["pnl"] or 0) < 0
-    )
-
-    completed_trades = (
-        winning_trades +
-        losing_trades
-    )
-
-    if completed_trades > 0:
-        win_rate = (
-            winning_trades /
-            completed_trades
-        ) * 100
-    else:
-        win_rate = 0
-
-    # --------------------------------------------------------
-    # Unrealized P/L
-    # --------------------------------------------------------
-
-    unrealized_pnl = 0.0
-
-    positions = get_all_positions()
-
-    for position in positions:
-        market = position["market"]
-
-        quantity = float(
-            position["quantity"]
+def get_candles(
+    market,
+    interval="1h",
+    outputsize=100
+):
+    if not TWELVE_DATA_API_KEY:
+        raise RuntimeError(
+            "TWELVE_DATA_API_KEY is not configured on Render."
         )
 
-        avg_price = float(
-            position["avg_price"]
-        )
+    response = requests.get(
+        f"{TWELVE_DATA_URL}/time_series",
+        params={
+            "symbol": market,
+            "interval": interval,
+            "outputsize": outputsize,
+            "apikey": TWELVE_DATA_API_KEY,
+            "format": "JSON"
+        },
+        timeout=20
+    )
 
-        try:
-            current_price = get_market_price(
-                market
+    response.raise_for_status()
+
+    data = response.json()
+
+    if data.get("status") == "error":
+        raise RuntimeError(
+            data.get(
+                "message",
+                "Twelve Data returned an error."
             )
-        except Exception:
-            current_price = avg_price
+        )
 
-        unrealized_pnl += (
-            current_price - avg_price
-        ) * quantity
+    values = data.get("values")
 
-    total_pnl = (
-        realized_pnl +
-        unrealized_pnl
+    if not values:
+        raise RuntimeError(
+            "No market data was returned."
+        )
+
+    return list(reversed(values))
+
+
+def get_market_price(market):
+    if not TWELVE_DATA_API_KEY:
+        raise RuntimeError(
+            "TWELVE_DATA_API_KEY is not configured on Render."
+        )
+
+    response = requests.get(
+        f"{TWELVE_DATA_URL}/price",
+        params={
+            "symbol": market,
+            "apikey": TWELVE_DATA_API_KEY
+        },
+        timeout=20
     )
 
-    portfolio = get_portfolio()
+    response.raise_for_status()
 
-    return {
-        "realized_pnl": realized_pnl,
-        "unrealized_pnl": unrealized_pnl,
-        "total_pnl": total_pnl,
+    data = response.json()
 
-        "winning_trades": winning_trades,
-        "losing_trades": losing_trades,
-        "completed_trades": completed_trades,
-        "win_rate": win_rate,
+    if data.get("status") == "error":
+        raise RuntimeError(
+            data.get(
+                "message",
+                "Twelve Data returned a price error."
+            )
+        )
 
-        "cash": portfolio["cash"],
-        "holdings_value": portfolio["holdings_value"],
-        "portfolio_value": portfolio["total_value"],
+    if "price" not in data:
+        raise RuntimeError(
+            "Twelve Data did not return a price."
+        )
 
-        "paper_only": True
-    }
+    return float(data["price"])
 
 
 # ============================================================
@@ -372,10 +363,7 @@ def ema(values, period):
 
     multiplier = 2 / (period + 1)
 
-    result = (
-        sum(values[:period]) /
-        period
-    )
+    result = sum(values[:period]) / period
 
     for price in values[period:]:
         result = (
@@ -393,41 +381,22 @@ def rsi(values, period=14):
     losses = []
 
     for i in range(1, len(values)):
-        change = (
-            values[i] -
-            values[i - 1]
-        )
+        change = values[i] - values[i - 1]
 
-        gains.append(
-            max(change, 0)
-        )
+        gains.append(max(change, 0))
+        losses.append(max(-change, 0))
 
-        losses.append(
-            max(-change, 0)
-        )
-
-    avg_gain = (
-        sum(gains[:period]) /
-        period
-    )
-
-    avg_loss = (
-        sum(losses[:period]) /
-        period
-    )
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
 
     for i in range(period, len(gains)):
         avg_gain = (
-            (
-                avg_gain * (period - 1)
-            ) +
+            (avg_gain * (period - 1)) +
             gains[i]
         ) / period
 
         avg_loss = (
-            (
-                avg_loss * (period - 1)
-            ) +
+            (avg_loss * (period - 1)) +
             losses[i]
         ) / period
 
@@ -483,149 +452,3 @@ def atr(candles, period=14):
     true_ranges = []
 
     for i in range(1, len(candles)):
-        high = float(
-            candles[i]["high"]
-        )
-
-        low = float(
-            candles[i]["low"]
-        )
-
-        previous_close = float(
-            candles[i - 1]["close"]
-        )
-
-        true_ranges.append(
-            max(
-                high - low,
-                abs(
-                    high -
-                    previous_close
-                ),
-                abs(
-                    low -
-                    previous_close
-                )
-            )
-        )
-
-    if len(true_ranges) < period:
-        return None
-
-    return (
-        sum(true_ranges[-period:]) /
-        period
-    )
-
-
-# ============================================================
-# MARKET DATA
-# ============================================================
-
-def get_candles(
-    market,
-    interval="1h",
-    outputsize=100
-):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError(
-            "TWELVE_DATA_API_KEY is not configured on Render."
-        )
-
-    response = requests.get(
-        f"{TWELVE_DATA_URL}/time_series",
-        params={
-            "symbol": market,
-            "interval": interval,
-            "outputsize": outputsize,
-            "apikey": TWELVE_DATA_API_KEY,
-            "format": "JSON"
-        },
-        timeout=20
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get(
-                "message",
-                "Twelve Data returned an error."
-            )
-        )
-
-    values = data.get("values")
-
-    if not values:
-        raise RuntimeError(
-            "No market data was returned."
-        )
-
-    return list(
-        reversed(values)
-    )
-
-
-def get_market_price(market):
-    if not TWELVE_DATA_API_KEY:
-        raise RuntimeError(
-            "TWELVE_DATA_API_KEY is not configured on Render."
-        )
-
-    response = requests.get(
-        f"{TWELVE_DATA_URL}/price",
-        params={
-            "symbol": market,
-            "apikey": TWELVE_DATA_API_KEY
-        },
-        timeout=20
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    if data.get("status") == "error":
-        raise RuntimeError(
-            data.get(
-                "message",
-                "Twelve Data returned a price error."
-            )
-        )
-
-    if "price" not in data:
-        raise RuntimeError(
-            "Twelve Data did not return a price."
-        )
-
-    return float(
-        data["price"]
-    )
-
-
-# ============================================================
-# AI ANALYSIS
-# ============================================================
-
-def calculate_confidence(
-    score,
-    ema_fast,
-    ema_slow,
-    current_rsi,
-    current_macd,
-    macd_signal
-):
-    # Indicator agreement.
-    # This is NOT probability of profit.
-
-    confidence = 50
-
-    if abs(score) == 3:
-        confidence += 25
-
-    elif abs(score) == 2:
-        confidence += 15
-
-   
