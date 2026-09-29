@@ -33,74 +33,71 @@ async function runBot() {
         const price = Number(data.price);
 
         const confidence =
-            data.confidence !== undefined &&
-            data.confidence !== null
+            data.confidence != null
                 ? Number(data.confidence).toFixed(0) + "%"
                 : "N/A";
 
-        const rsi =
-            data.rsi !== undefined &&
-            data.rsi !== null
-                ? Number(data.rsi).toFixed(2)
-                : "N/A";
-
         const emaFast =
-            data.ema_fast !== undefined &&
-            data.ema_fast !== null
+            data.ema_fast != null
                 ? Number(data.ema_fast).toFixed(4)
                 : "N/A";
 
         const emaSlow =
-            data.ema_slow !== undefined &&
-            data.ema_slow !== null
+            data.ema_slow != null
                 ? Number(data.ema_slow).toFixed(4)
                 : "N/A";
 
+        const rsi =
+            data.rsi != null
+                ? Number(data.rsi).toFixed(2)
+                : "N/A";
+
         const macd =
-            data.macd !== undefined &&
-            data.macd !== null
+            data.macd != null
                 ? Number(data.macd).toFixed(6)
                 : "N/A";
 
         const macdSignal =
-            data.macd_signal !== undefined &&
-            data.macd_signal !== null
+            data.macd_signal != null
                 ? Number(data.macd_signal).toFixed(6)
                 : "N/A";
 
         const atr =
-            data.atr !== undefined &&
-            data.atr !== null
+            data.atr != null
                 ? Number(data.atr).toFixed(4)
                 : "N/A";
 
         const stopLoss =
-            data.stop_loss !== undefined &&
-            data.stop_loss !== null
+            data.stop_loss != null
                 ? Number(data.stop_loss).toFixed(4)
                 : "N/A";
 
         const takeProfit =
-            data.take_profit !== undefined &&
-            data.take_profit !== null
+            data.take_profit != null
                 ? Number(data.take_profit).toFixed(4)
                 : "N/A";
 
-        const message =
-            data.message ||
-            "No additional analysis message.";
+        let reasons = "No indicator explanation available.";
+
+        if (Array.isArray(data.reasons) && data.reasons.length > 0) {
+            reasons = data.reasons.join("\n• ");
+            reasons = "• " + reasons;
+        } else if (
+            data.message &&
+            data.message !== "..."
+        ) {
+            reasons = data.message;
+        }
 
         const tradeAction =
-            data.trade &&
-            data.trade.action
+            data.trade && data.trade.action
                 ? data.trade.action
                 : "NONE";
 
         const tradeMessage =
-            data.trade &&
-            data.trade.message
+            data.trade && data.trade.message
                 ? data.trade.message
-                : "";
+                : "No trade executed.";
 
         alert(
             "🤖 TradeMind AI V2\n\n" +
@@ -126,12 +123,10 @@ async function runBot() {
             "Take Profit: " + takeProfit + "\n\n" +
 
             "Trade Action: " + tradeAction + "\n" +
-            (tradeMessage
-                ? tradeMessage + "\n\n"
-                : "\n") +
+            tradeMessage + "\n\n" +
 
             "Reason:\n" +
-            message
+            reasons
         );
 
         window.location.reload();
@@ -141,7 +136,6 @@ async function runBot() {
             "❌ Bot error:\n\n" +
             error.message
         );
-
     } finally {
         if (button) {
             button.disabled = false;
