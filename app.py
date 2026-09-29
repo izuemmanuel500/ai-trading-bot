@@ -7,11 +7,17 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
+# ============================================================
+# TradeMind V2 - PAPER TRADING ONLY
+# ============================================================
+
 DATABASE = "trading.db"
 STARTING_BALANCE = 1000.00
 TRADE_AMOUNT = 50.00
-STOP_LOSS_PCT = 0.02
-TAKE_PROFIT_PCT = 0.04
+
+# ATR-based protection
+STOP_LOSS_ATR_MULTIPLIER = 1.5
+TAKE_PROFIT_ATR_MULTIPLIER = 2.5
 
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY", "").strip()
 TWELVE_DATA_URL = "https://api.twelvedata.com"
@@ -28,6 +34,10 @@ MARKETS = {
     "WTI/USD": {"name": "WTI Crude Oil", "symbol": "WTI/USD"},
 }
 
+
+# ============================================================
+# DATABASE
+# ============================================================
 
 def db():
     conn = sqlite3.connect(DATABASE)
@@ -67,11 +77,9 @@ def initialize_database():
         )
     """)
 
-    account = conn.execute(
+    if not conn.execute(
         "SELECT id FROM account WHERE id = 1"
-    ).fetchone()
-
-    if not account:
+    ).fetchone():
         conn.execute(
             "INSERT INTO account (id, balance) VALUES (1, ?)",
             (STARTING_BALANCE,)
@@ -87,7 +95,6 @@ def get_balance():
         "SELECT balance FROM account WHERE id = 1"
     ).fetchone()
     conn.close()
-
     return float(row["balance"]) if row else STARTING_BALANCE
 
 
@@ -108,7 +115,6 @@ def get_position(market):
         (market,)
     ).fetchone()
     conn.close()
-
     return dict(row) if row else None
 
 
@@ -118,21 +124,11 @@ def get_all_positions():
         "SELECT * FROM positions ORDER BY market"
     ).fetchall()
     conn.close()
-
     return [dict(row) for row in rows]
 
 
-def record_trade(
-    market,
-    side,
-    quantity,
-    price,
-    value,
-    pnl=0,
-    signal=""
-):
+def record_trade(market, side, quantity, price, value, pnl=0, signal=""):
     conn = db()
-
     conn.execute("""
         INSERT INTO trades
         (market, side, quantity, price, value, pnl, signal, created_at)
@@ -147,25 +143,24 @@ def record_trade(
         signal,
         datetime.now(timezone.utc).isoformat()
     ))
-
     conn.commit()
     conn.close()
 
 
 def get_trades(limit=50):
     conn = db()
-
     rows = conn.execute("""
-        SELECT *
-        FROM trades
+        SELECT * FROM trades
         ORDER BY id DESC
         LIMIT ?
     """, (limit,)).fetchall()
-
     conn.close()
-
     return [dict(row) for row in rows]
 
+
+# ============================================================
+# INDICATORS
+# ============================================================
 
 def ema(values, period):
     if len(values) < period:
@@ -199,7 +194,6 @@ def rsi(values, period=14):
         avg_gain = (
             (avg_gain * (period - 1)) + gains[i]
         ) / period
-
         avg_loss = (
             (avg_loss * (period - 1)) + losses[i]
         ) / period
@@ -208,7 +202,6 @@ def rsi(values, period=14):
         return 100.0
 
     rs = avg_gain / avg_loss
-
     return 100 - (100 / (1 + rs))
 
 
@@ -245,19 +238,21 @@ def atr(candles, period=14):
         low = float(candles[i]["low"])
         previous_close = float(candles[i - 1]["close"])
 
-        true_ranges.append(
-            max(
-                high - low,
-                abs(high - previous_close),
-                abs(low - previous_close)
-            )
-        )
+        true_ranges.append(max(
+            high - low,
+            abs(high - previous_close),
+            abs(low - previous_close)
+        ))
 
     if len(true_ranges) < period:
         return None
 
     return sum(true_ranges[-period:]) / period
 
+
+# ============================================================
+# MARKET DATA
+# ============================================================
 
 def get_candles(market, interval="1h", outputsize=100):
     if not TWELVE_DATA_API_KEY:
@@ -278,23 +273,17 @@ def get_candles(market, interval="1h", outputsize=100):
     )
 
     response.raise_for_status()
-
     data = response.json()
 
     if data.get("status") == "error":
         raise RuntimeError(
-            data.get(
-                "message",
-                "Twelve Data returned an error."
-            )
+            data.get("message", "Twelve Data returned an error.")
         )
 
     values = data.get("values")
 
     if not values:
-        raise RuntimeError(
-            "No market data was returned."
-        )
+        raise RuntimeError("No market data was returned.")
 
     return list(reversed(values))
 
@@ -315,7 +304,6 @@ def get_market_price(market):
     )
 
     response.raise_for_status()
-
     data = response.json()
 
     if data.get("status") == "error":
@@ -327,11 +315,49 @@ def get_market_price(market):
         )
 
     if "price" not in data:
-        raise RuntimeError(
-            "Twelve Data did not return a price."
-        )
+        raise RuntimeError("Twelve Data did not return a price.")
 
     return float(data["price"])
+
+
+# ============================================================
+# V2 ANALYSIS
+# ============================================================
+
+def calculate_confidence(
+    score,
+    ema_fast,
+    ema_slow,
+    current_rsi,
+    current_macd,
+    macd_signal
+):
+    # This is indicator agreement, NOT probability of profit.
+    confidence = 50
+
+    if abs(score) == 3:
+        confidence += 25
+    elif abs(score) == 2:
+        confidence += 15
+    elif abs(score) == 1:
+        confidence += 5
+
+    if ema_fast is not None and ema_slow is not None:
+        if score > 0 and ema_fast > ema_slow:
+            confidence += 5
+        elif score < 0 and ema_fast < ema_slow:
+            confidence += 5
+
+    if current_macd is not None and macd_signal is not None:
+        if score > 0 and current_macd > macd_signal:
+            confidence += 5
+        elif score < 0 and current_macd < macd_signal:
+            confidence += 5
+
+    if current_rsi is not None and 40 <= current_rsi <= 60:
+        confidence -= 5
+
+    return max(0, min(100, int(round(confidence))))
 
 
 def analyze_market(market):
@@ -342,16 +368,12 @@ def analyze_market(market):
     )
 
     closes = [float(c["close"]) for c in candles]
-
     price = closes[-1]
 
     ema_fast = ema(closes, 12)
     ema_slow = ema(closes, 26)
-
     current_rsi = rsi(closes, 14)
-
     current_macd, macd_signal = macd(closes)
-
     current_atr = atr(candles, 14)
 
     score = 0
@@ -390,25 +412,95 @@ def analyze_market(market):
     else:
         signal = "HOLD"
 
+    if score > 0:
+        market_strength = "BULLISH"
+    elif score < 0:
+        market_strength = "BEARISH"
+    else:
+        market_strength = "NEUTRAL"
+
+    confidence = calculate_confidence(
+        score,
+        ema_fast,
+        ema_slow,
+        current_rsi,
+        current_macd,
+        macd_signal
+    )
+
+    if current_atr is None:
+        risk_level = "UNKNOWN"
+    else:
+        atr_percent = (current_atr / price) * 100
+
+        if atr_percent >= 3:
+            risk_level = "HIGH"
+        elif atr_percent >= 1:
+            risk_level = "MEDIUM"
+        else:
+            risk_level = "LOW"
+
+    stop_loss = None
+    take_profit = None
+
+    if current_atr is not None:
+        if signal == "BUY":
+            stop_loss = price - (
+                current_atr * STOP_LOSS_ATR_MULTIPLIER
+            )
+            take_profit = price + (
+                current_atr * TAKE_PROFIT_ATR_MULTIPLIER
+            )
+
+        elif signal == "SELL":
+            stop_loss = price + (
+                current_atr * STOP_LOSS_ATR_MULTIPLIER
+            )
+            take_profit = price - (
+                current_atr * TAKE_PROFIT_ATR_MULTIPLIER
+            )
+
+    if signal == "HOLD":
+        message = (
+            " | ".join(reasons)
+            + ". The indicators are mixed, so "
+              "TradeMind is waiting for stronger confirmation."
+        )
+    else:
+        message = (
+            " | ".join(reasons)
+            + ". This is a paper-trading signal only."
+        )
+
+    # IMPORTANT: all V2 fields are explicitly returned here.
     return {
         "market": market,
         "price": price,
         "signal": signal,
         "score": score,
+        "confidence": confidence,
+        "market_strength": market_strength,
+        "risk_level": risk_level,
         "ema_fast": ema_fast,
         "ema_slow": ema_slow,
         "rsi": current_rsi,
         "macd": current_macd,
         "macd_signal": macd_signal,
         "atr": current_atr,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
         "reasons": reasons,
-        "message": " | ".join(reasons)
+        "message": message,
+        "paper_only": True
     }
 
 
+# ============================================================
+# PAPER TRADING
+# ============================================================
+
 def paper_buy(market, price, signal):
     balance = get_balance()
-
     position = get_position(market)
 
     amount = min(TRADE_AMOUNT, balance)
@@ -424,7 +516,6 @@ def paper_buy(market, price, signal):
     if position:
         old_quantity = float(position["quantity"])
         old_avg = float(position["avg_price"])
-
         new_quantity = old_quantity + quantity
 
         new_avg = (
@@ -433,46 +524,28 @@ def paper_buy(market, price, signal):
         ) / new_quantity
 
         conn = db()
-
         conn.execute("""
             UPDATE positions
             SET quantity = ?, avg_price = ?
             WHERE market = ?
-        """, (
-            new_quantity,
-            new_avg,
-            market
-        ))
-
+        """, (new_quantity, new_avg, market))
         conn.commit()
         conn.close()
 
     else:
         conn = db()
-
         conn.execute("""
             INSERT INTO positions
             (market, quantity, avg_price)
             VALUES (?, ?, ?)
-        """, (
-            market,
-            quantity,
-            price
-        ))
-
+        """, (market, quantity, price))
         conn.commit()
         conn.close()
 
     set_balance(balance - amount)
 
     record_trade(
-        market,
-        "BUY",
-        quantity,
-        price,
-        amount,
-        0,
-        signal
+        market, "BUY", quantity, price, amount, 0, signal
     )
 
     return {
@@ -496,31 +569,20 @@ def paper_sell(market, price, signal):
     avg_price = float(position["avg_price"])
 
     value = quantity * price
-
     pnl = (price - avg_price) * quantity
 
-    set_balance(
-        get_balance() + value
-    )
+    set_balance(get_balance() + value)
 
     conn = db()
-
     conn.execute(
         "DELETE FROM positions WHERE market = ?",
         (market,)
     )
-
     conn.commit()
     conn.close()
 
     record_trade(
-        market,
-        "SELL",
-        quantity,
-        price,
-        value,
-        pnl,
-        signal
+        market, "SELL", quantity, price, value, pnl, signal
     )
 
     return {
@@ -532,50 +594,52 @@ def paper_sell(market, price, signal):
     }
 
 
-def apply_risk_rules(market, price):
+def apply_risk_rules(market, price, analysis):
     position = get_position(market)
 
     if not position:
         return None
 
+    stop_loss = analysis.get("stop_loss")
+    take_profit = analysis.get("take_profit")
+
+    if stop_loss is None or take_profit is None:
+        return None
+
     avg_price = float(position["avg_price"])
 
-    if price <= avg_price * (1 - STOP_LOSS_PCT):
-        return paper_sell(
-            market,
-            price,
-            "STOP LOSS"
-        )
+    # Existing paper positions are long positions.
+    # Only trigger protection when the current price
+    # crosses the calculated levels.
+    if price <= stop_loss:
+        return paper_sell(market, price, "STOP LOSS")
 
-    if price >= avg_price * (1 + TAKE_PROFIT_PCT):
-        return paper_sell(
-            market,
-            price,
-            "TAKE PROFIT"
-        )
+    if price >= take_profit:
+        return paper_sell(market, price, "TAKE PROFIT")
+
+    # If current ATR levels are below/above the old
+    # position's entry in an unusual way, do not force
+    # a trade. This keeps paper testing conservative.
+    _ = avg_price
 
     return None
 
 
+# ============================================================
+# PORTFOLIO
+# ============================================================
+
 def get_portfolio():
     balance = get_balance()
-
     positions = get_all_positions()
 
     holdings_value = 0
-
     enriched_positions = []
 
     for position in positions:
         market = position["market"]
-
-        quantity = float(
-            position["quantity"]
-        )
-
-        avg_price = float(
-            position["avg_price"]
-        )
+        quantity = float(position["quantity"])
+        avg_price = float(position["avg_price"])
 
         try:
             price = get_market_price(market)
@@ -583,11 +647,7 @@ def get_portfolio():
             price = avg_price
 
         value = quantity * price
-
-        pnl = (
-            price - avg_price
-        ) * quantity
-
+        pnl = (price - avg_price) * quantity
         holdings_value += value
 
         enriched_positions.append({
@@ -606,12 +666,13 @@ def get_portfolio():
     }
 
 
+# ============================================================
+# ROUTES
+# ============================================================
+
 @app.route("/")
 def dashboard():
-    selected_market = request.args.get(
-        "market",
-        "BTC/USD"
-    )
+    selected_market = request.args.get("market", "BTC/USD")
 
     if selected_market not in MARKETS:
         selected_market = "BTC/USD"
@@ -620,7 +681,6 @@ def dashboard():
         portfolio = get_portfolio()
     except Exception:
         balance = get_balance()
-
         portfolio = {
             "balance": balance,
             "cash": balance,
@@ -630,9 +690,7 @@ def dashboard():
         }
 
     try:
-        price = get_market_price(
-            selected_market
-        )
+        price = get_market_price(selected_market)
     except Exception:
         price = 0.0
 
@@ -649,52 +707,40 @@ def dashboard():
 
 @app.route("/api/run", methods=["POST"])
 def run_bot():
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    market = data.get(
-        "market",
-        "BTC/USD"
-    )
+    data = request.get_json(silent=True) or {}
+    market = data.get("market", "BTC/USD")
 
     if market not in MARKETS:
-        return jsonify({
-            "error": "Unsupported market."
-        }), 400
+        return jsonify({"error": "Unsupported market."}), 400
 
     try:
-        analysis = analyze_market(
-            market
-        )
+        analysis = analyze_market(market)
 
         risk_action = apply_risk_rules(
             market,
-            analysis["price"]
+            analysis["price"],
+            analysis
         )
 
-        trade_action = risk_action
-
-        if not risk_action:
-            if analysis["signal"] == "BUY":
-                trade_action = paper_buy(
-                    market,
-                    analysis["price"],
-                    analysis["signal"]
-                )
-
-            elif analysis["signal"] == "SELL":
-                trade_action = paper_sell(
-                    market,
-                    analysis["price"],
-                    analysis["signal"]
-                )
-
-            else:
-                trade_action = {
-                    "action": "HOLD",
-                    "message": "No trade executed."
-                }
+        if risk_action:
+            trade_action = risk_action
+        elif analysis["signal"] == "BUY":
+            trade_action = paper_buy(
+                market,
+                analysis["price"],
+                analysis["signal"]
+            )
+        elif analysis["signal"] == "SELL":
+            trade_action = paper_sell(
+                market,
+                analysis["price"],
+                analysis["signal"]
+            )
+        else:
+            trade_action = {
+                "action": "HOLD",
+                "message": "No trade executed."
+            }
 
         return jsonify({
             **analysis,
@@ -710,119 +756,76 @@ def run_bot():
 
 @app.route("/api/price")
 def api_price():
-    market = request.args.get(
-        "market",
-        "BTC/USD"
-    )
+    market = request.args.get("market", "BTC/USD")
 
     if market not in MARKETS:
-        return jsonify({
-            "error": "Unsupported market."
-        }), 400
+        return jsonify({"error": "Unsupported market."}), 400
 
     try:
-        price = get_market_price(
-            market
-        )
-
         return jsonify({
             "market": market,
-            "price": price
+            "price": get_market_price(market)
         })
-
     except Exception as exc:
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/analysis")
 def api_analysis():
-    market = request.args.get(
-        "market",
-        "BTC/USD"
-    )
+    market = request.args.get("market", "BTC/USD")
 
     if market not in MARKETS:
-        return jsonify({
-            "error": "Unsupported market."
-        }), 400
+        return jsonify({"error": "Unsupported market."}), 400
 
     try:
-        return jsonify(
-            analyze_market(market)
-        )
-
+        return jsonify(analyze_market(market))
     except Exception as exc:
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/portfolio")
 def api_portfolio():
     try:
-        return jsonify(
-            get_portfolio()
-        )
-
+        return jsonify(get_portfolio())
     except Exception as exc:
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/api/trades")
 def api_trades():
-    return jsonify(
-        get_trades()
-    )
+    return jsonify(get_trades())
 
 
 @app.route("/api/markets")
 def api_markets():
-    return jsonify(
-        MARKETS
-    )
+    return jsonify(MARKETS)
 
 
 @app.route("/api/backtest", methods=["POST"])
 def api_backtest():
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    market = data.get(
-        "market",
-        "BTC/USD"
-    )
+    data = request.get_json(silent=True) or {}
+    market = data.get("market", "BTC/USD")
 
     if market not in MARKETS:
-        return jsonify({
-            "error": "Unsupported market."
-        }), 400
+        return jsonify({"error": "Unsupported market."}), 400
 
     try:
         candles = get_candles(
             market,
-            interval=data.get(
-                "interval",
-                "1h"
-            ),
+            interval=data.get("interval", "1h"),
             outputsize=100
         )
 
-        closes = [
-            float(c["close"])
-            for c in candles
-        ]
+        closes = [float(c["close"]) for c in candles]
+
+        if len(closes) < 2:
+            raise RuntimeError("Not enough historical data.")
 
         start_price = closes[0]
         end_price = closes[-1]
 
         change_pct = (
-            (end_price - start_price)
-            / start_price
+            (end_price - start_price) / start_price
         ) * 100
 
         return jsonify({
@@ -838,9 +841,7 @@ def api_backtest():
         })
 
     except Exception as exc:
-        return jsonify({
-            "error": str(exc)
-        }), 500
+        return jsonify({"error": str(exc)}), 500
 
 
 @app.route("/health")
@@ -848,6 +849,7 @@ def health():
     return jsonify({
         "status": "ok",
         "service": "TradeMind",
+        "version": "V2",
         "paper_trading": True,
         "markets": len(MARKETS)
     })
@@ -859,9 +861,7 @@ initialize_database()
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
-        port=int(
-            os.getenv("PORT", "5000")
-        ),
+        port=int(os.getenv("PORT", "5000")),
         debug=False
-    )
+)
     
