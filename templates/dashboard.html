@@ -9,7 +9,7 @@
     <title>TradeMind AI Paper Trading</title>
 
     <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css', v='4') }}">
+          href="{{ url_for('static', filename='style.css', v='5') }}">
 </head>
 
 <body>
@@ -71,7 +71,7 @@
                 {{ selected_market }}
             </strong>
 
-            <span>
+            <span id="heroPrice">
                 ${{ "%.4f"|format(price|default(0, true)) }}
             </span>
 
@@ -216,13 +216,8 @@
         </h2>
 
 
-        <!-- IMPORTANT:
-             JavaScript writes the live AI result here.
-        -->
-
         <div id="analysisResult"
              class="analysis-card">
-
 
             <div class="analysis-status">
                 LIVE DATA
@@ -271,7 +266,6 @@
                 All trades remain paper trades.
 
             </p>
-
 
         </div>
 
@@ -404,93 +398,88 @@
         </h2>
 
 
-        {% if portfolio.positions %}
+        <!-- JavaScript updates this area after every trade -->
+
+        <div id="positionsContainer">
+
+            {% if portfolio.positions %}
+
+                <div class="positions">
+
+                    {% for position in portfolio.positions %}
+
+                        <div class="position-card">
+
+                            <div>
+
+                                <strong>
+                                    {{ position.market }}
+                                </strong>
+
+                                <span>
+                                    Qty:
+                                    {{ "%.8f"|format(
+                                        position.quantity
+                                    ) }}
+                                </span>
+
+                            </div>
 
 
-            <div class="positions">
+                            <div>
+
+                                <span>
+                                    Entry:
+                                    ${{ "%.4f"|format(
+                                        position.avg_price
+                                    ) }}
+                                </span>
+
+                                <span>
+                                    Current:
+                                    ${{ "%.4f"|format(
+                                        position.current_price
+                                    ) }}
+                                </span>
+
+                            </div>
 
 
-                {% for position in portfolio.positions %}
+                            <div>
 
+                                <strong>
+                                    Value:
+                                    ${{ "%.2f"|format(
+                                        position.value
+                                    ) }}
+                                </strong>
 
-                    <div class="position-card">
+                                <span>
+                                    P/L:
+                                    ${{ "%.2f"|format(
+                                        position.pnl
+                                    ) }}
+                                </span>
 
-
-                        <div>
-
-                            <strong>
-                                {{ position.market }}
-                            </strong>
-
-                            <span>
-                                Qty:
-                                {{ "%.8f"|format(
-                                    position.quantity
-                                ) }}
-                            </span>
+                            </div>
 
                         </div>
 
+                    {% endfor %}
 
-                        <div>
+                </div>
 
-                            <span>
-                                Entry:
-                                ${{ "%.4f"|format(
-                                    position.avg_price
-                                ) }}
-                            </span>
+            {% else %}
 
-                            <span>
-                                Current:
-                                ${{ "%.4f"|format(
-                                    position.current_price
-                                ) }}
-                            </span>
+                <div class="empty-state">
 
-                        </div>
+                    No open paper positions.
 
+                </div>
 
-                        <div>
+            {% endif %}
 
-                            <strong>
-                                Value:
-                                ${{ "%.2f"|format(
-                                    position.value
-                                ) }}
-                            </strong>
-
-                            <span>
-                                P/L:
-                                ${{ "%.2f"|format(
-                                    position.pnl
-                                ) }}
-                            </span>
-
-                        </div>
-
-
-                    </div>
-
-
-                {% endfor %}
-
-
-            </div>
-
-
-        {% else %}
-
-
-            <div class="empty-state">
-
-                No open paper positions.
-
-            </div>
-
-
-        {% endif %}
-
+        </div>
 
     </section>
 
@@ -517,7 +506,7 @@
 <script src="{{ url_for(
     'static',
     filename='app.js',
-    v='4'
+    v='5'
 ) }}"></script>
 
 
