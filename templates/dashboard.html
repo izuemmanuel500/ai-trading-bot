@@ -481,7 +481,56 @@
 
         </div>
 
-    </section>
+    <section class="panel">
+    <div class="panel-header">
+        <div>
+            <p class="eyebrow">PERFORMANCE</p>
+            <h3>Trade Performance</h3>
+        </div>
+        <span class="live-label">PAPER DATA</span>
+    </div>
+
+    <div class="performance-grid">
+        <div class="performance-card">
+            <span>Total Trades</span>
+            <strong id="totalTrades">0</strong>
+        </div>
+
+        <div class="performance-card">
+            <span>Winning Trades</span>
+            <strong id="winningTrades">0</strong>
+        </div>
+
+        <div class="performance-card">
+            <span>Losing Trades</span>
+            <strong id="losingTrades">0</strong>
+        </div>
+
+        <div class="performance-card">
+            <span>Realized P/L</span>
+            <strong id="realizedPnl">$0.00</strong>
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <p class="eyebrow">TRADE HISTORY</p>
+            <h3>Recent Paper Trades</h3>
+        </div>
+        <span class="live-label">LATEST 50</span>
+    </div>
+
+    <div id="tradeHistoryContainer">
+        <div class="empty-state">
+            <div class="empty-icon">📜</div>
+            <h4>No trades yet</h4>
+            <p>Your paper trades will appear here.</p>
+        </div>
+    </div>
+</section>
+    
 
 
     <!-- PAPER TRADING WARNING -->
