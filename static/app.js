@@ -8,7 +8,7 @@ async function runBot() {
 
     if (button) {
         button.disabled = true;
-        button.textContent = "Analyzing...";
+        button.textContent = "🤖 Analyzing...";
     }
 
     try {
@@ -30,32 +30,154 @@ async function runBot() {
             );
         }
 
+        /*
+         * Find the AI analysis area.
+         * If it exists, display the result directly on the page.
+         */
+        const analysisArea =
+            document.querySelector("#analysisResult");
+
         const reasons = Array.isArray(data.reasons)
             ? data.reasons
             : [];
 
-        const reasonText = reasons.length > 0
-            ? reasons.map(reason => "• " + reason).join("\n")
-            : "No reasons returned.";
+        const reasonHTML = reasons.length > 0
+            ? reasons.map(reason =>
+                `<li>${escapeHTML(reason)}</li>`
+              ).join("")
+            : "<li>No reasons returned.</li>";
 
-        alert(
-            "🤖 TradeMind AI Result\n\n" +
-            "Market: " + data.market + "\n" +
-            "Signal: " + data.signal + "\n" +
-            "Price: $" + Number(data.price).toFixed(4) + "\n" +
-            "Confidence: " + data.confidence + "%\n" +
-            "Market Strength: " + data.market_strength + "\n" +
-            "Risk Level: " + data.risk_level + "\n\n" +
-            "📊 REASONS\n" +
-            reasonText + "\n\n" +
-            "💬 " + data.message
-        );
+        if (analysisArea) {
+            analysisArea.innerHTML = `
+                <div class="analysis-result">
 
-        window.location.reload();
+                    <div class="analysis-header">
+                        <span>🤖 TradeMind AI</span>
+                        <span class="live-badge">LIVE</span>
+                    </div>
+
+                    <div class="signal-box">
+                        <div class="signal-label">
+                            SIGNAL
+                        </div>
+
+                        <div class="signal-value">
+                            ${escapeHTML(data.signal || "HOLD")}
+                        </div>
+                    </div>
+
+                    <div class="analysis-grid">
+
+                        <div class="analysis-item">
+                            <span>Market</span>
+                            <strong>
+                                ${escapeHTML(data.market || market)}
+                            </strong>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>Price</span>
+                            <strong>
+                                $${Number(data.price || 0).toFixed(4)}
+                            </strong>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>Confidence</span>
+                            <strong>
+                                ${Number(data.confidence || 0)}%
+                            </strong>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>Market Strength</span>
+                            <strong>
+                                ${escapeHTML(
+                                    data.market_strength || "NEUTRAL"
+                                )}
+                            </strong>
+                        </div>
+
+                        <div class="analysis-item">
+                            <span>Risk Level</span>
+                            <strong>
+                                ${escapeHTML(
+                                    data.risk_level || "LOW"
+                                )}
+                            </strong>
+                        </div>
+
+                    </div>
+
+                    <div class="reasons-section">
+                        <h3>📊 Why TradeMind Chose This</h3>
+
+                        <ul>
+                            ${reasonHTML}
+                        </ul>
+                    </div>
+
+                    <div class="message-section">
+                        <h3>💬 AI Explanation</h3>
+
+                        <p>
+                            ${escapeHTML(
+                                data.message ||
+                                data.explanation ||
+                                "No explanation available."
+                            )}
+                        </p>
+                    </div>
+
+                    ${
+                        data.paper_only
+                            ? `
+                            <div class="paper-warning">
+                                ⚠️ PAPER TRADING ONLY
+                            </div>
+                            `
+                            : ""
+                    }
+
+                </div>
+            `;
+        } else {
+            /*
+             * Fallback if the dashboard does not yet
+             * contain #analysisResult.
+             */
+            alert(
+                "🤖 TradeMind AI Result\n\n" +
+                "Market: " + data.market + "\n" +
+                "Signal: " + data.signal + "\n" +
+                "Price: $" +
+                Number(data.price).toFixed(4) + "\n" +
+                "Confidence: " +
+                data.confidence + "%\n" +
+                "Market Strength: " +
+                data.market_strength + "\n" +
+                "Risk Level: " +
+                data.risk_level + "\n\n" +
+                "📊 REASONS\n" +
+                reasons.map(
+                    reason => "• " + reason
+                ).join("\n") +
+                "\n\n💬 " +
+                (data.message || "")
+            );
+        }
+
+        /*
+         * Refresh the dashboard data after the trade,
+         * but do NOT reload the whole page.
+         */
+        await refreshDashboard();
 
     } catch (error) {
+        console.error("TradeMind error:", error);
+
         alert(
-            "❌ Bot error:\n\n" +
+            "❌ TradeMind error:\n\n" +
             error.message
         );
     } finally {
@@ -67,24 +189,118 @@ async function runBot() {
 }
 
 
+/*
+ * Safely display text returned by the server.
+ */
+function escapeHTML(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+
+/*
+ * Refresh portfolio information without
+ * refreshing the entire webpage.
+ */
+async function refreshDashboard() {
+    try {
+        const response = await fetch(
+            "/api/portfolio"
+        );
+
+        if (!response.ok) {
+            return;
+        }
+
+        const data = await response.json();
+
+        updateElement(
+            "#cashValue",
+            formatMoney(
+                data.cash !== undefined
+                    ? data.cash
+                    : data.balance
+            )
+        );
+
+        updateElement(
+            "#portfolioValue",
+            formatMoney(
+                data.total_value !== undefined
+                    ? data.total_value
+                    : data.balance
+            )
+        );
+
+        const positions =
+            Array.isArray(data.positions)
+                ? data.positions
+                : [];
+
+        updateElement(
+            "#positionsCount",
+            positions.length
+        );
+
+    } catch (error) {
+        console.log(
+            "Portfolio refresh skipped:",
+            error.message
+        );
+    }
+}
+
+
+function updateElement(selector, value) {
+    const element =
+        document.querySelector(selector);
+
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+
+function formatMoney(value) {
+    const number = Number(value || 0);
+
+    return "$" + number.toFixed(2);
+}
+
+
+/*
+ * Change selected market.
+ */
 function changeMarket() {
     const marketSelect =
         document.querySelector("#marketSelect");
 
-    if (!marketSelect) return;
+    if (!marketSelect) {
+        return;
+    }
 
     const market =
-        encodeURIComponent(marketSelect.value);
+        encodeURIComponent(
+            marketSelect.value
+        );
 
     window.location.href =
         "/?market=" + market;
 }
 
 
+/*
+ * Select a market from another dashboard
+ * element or market card.
+ */
 function selectMarket(symbol) {
     const market =
         encodeURIComponent(symbol);
 
     window.location.href =
         "/?market=" + market;
-            }
+                                    }
