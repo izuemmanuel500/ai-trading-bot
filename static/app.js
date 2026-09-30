@@ -162,6 +162,10 @@ async function runBot() {
             `;
         }
 
+        /*
+         * Refresh both portfolio AND
+         * trade performance/history.
+         */
         await refreshDashboard();
 
     } catch (error) {
@@ -188,10 +192,23 @@ async function runBot() {
 
 
 /* ================================
-   REFRESH PAPER PORTFOLIO
+   REFRESH DASHBOARD
 ================================ */
 
 async function refreshDashboard() {
+
+    await refreshPortfolio();
+
+    await refreshTradeHistory();
+
+}
+
+
+/* ================================
+   REFRESH PAPER PORTFOLIO
+================================ */
+
+async function refreshPortfolio() {
 
     try {
 
@@ -251,6 +268,292 @@ async function refreshDashboard() {
             error.message
         );
     }
+}
+
+
+/* ================================
+   REFRESH TRADE HISTORY
+================================ */
+
+async function refreshTradeHistory() {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/trades",
+                {
+                    cache: "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Trade history request failed"
+            );
+        }
+
+        const trades =
+            await response.json();
+
+        const tradeList =
+            Array.isArray(trades)
+                ? trades
+                : [];
+
+        /*
+         * Calculate performance.
+         *
+         * BUY trades have pnl = 0.
+         * SELL trades contain the realized P/L.
+         */
+        let totalTrades = tradeList.length;
+        let winningTrades = 0;
+        let losingTrades = 0;
+        let realizedPnL = 0;
+
+        tradeList.forEach(function (trade) {
+
+            const pnl =
+                Number(trade.pnl || 0);
+
+            /*
+             * Only completed SELL trades
+             * count toward realized performance.
+             */
+            if (
+                String(trade.side || "").toUpperCase()
+                === "SELL"
+            ) {
+
+                realizedPnL += pnl;
+
+                if (pnl > 0) {
+                    winningTrades++;
+                }
+
+                if (pnl < 0) {
+                    losingTrades++;
+                }
+            }
+        });
+
+        updateElement(
+            "#totalTrades",
+            totalTrades
+        );
+
+        updateElement(
+            "#winningTrades",
+            winningTrades
+        );
+
+        updateElement(
+            "#losingTrades",
+            losingTrades
+        );
+
+        updateElement(
+            "#realizedPnL",
+            formatPnL(realizedPnL)
+        );
+
+        renderTradeHistory(tradeList);
+
+    } catch (error) {
+
+        console.log(
+            "Trade history refresh skipped:",
+            error.message
+        );
+    }
+}
+
+
+/* ================================
+   RENDER TRADE HISTORY
+================================ */
+
+function renderTradeHistory(trades) {
+
+    const container =
+        document.querySelector(
+            "#tradeHistoryContainer"
+        );
+
+    if (!container) {
+        return;
+    }
+
+    if (!trades.length) {
+
+        container.innerHTML = `
+            <div class="empty-state">
+
+                <div class="empty-icon">
+                    📜
+                </div>
+
+                <h4>
+                    No trades yet
+                </h4>
+
+                <p>
+                    Your paper trades will
+                    appear here.
+                </p>
+
+            </div>
+        `;
+
+        return;
+    }
+
+    const historyHTML =
+        trades.map(function (trade) {
+
+            const side =
+                String(
+                    trade.side || ""
+                ).toUpperCase();
+
+            const pnl =
+                Number(
+                    trade.pnl || 0
+                );
+
+            const pnlClass =
+                pnl > 0
+                    ? "profit"
+                    : pnl < 0
+                        ? "loss"
+                        : "";
+
+            const date =
+                formatTradeDate(
+                    trade.created_at
+                );
+
+            return `
+                <div class="trade-history-item">
+
+                    <div class="trade-main">
+
+                        <strong>
+                            ${escapeHTML(
+                                trade.market ||
+                                "UNKNOWN"
+                            )}
+                        </strong>
+
+                        <span class="trade-side ${side.toLowerCase()}">
+                            ${escapeHTML(side)}
+                        </span>
+
+                    </div>
+
+                    <div class="trade-details">
+
+                        <span>
+                            Price:
+                            $${Number(
+                                trade.price || 0
+                            ).toFixed(4)}
+                        </span>
+
+                        <span>
+                            Qty:
+                            ${Number(
+                                trade.quantity || 0
+                            ).toFixed(8)}
+                        </span>
+
+                        <span>
+                            Value:
+                            $${Number(
+                                trade.value || 0
+                            ).toFixed(2)}
+                        </span>
+
+                    </div>
+
+                    <div class="trade-result">
+
+                        <span>
+                            P/L:
+                        </span>
+
+                        <strong class="${pnlClass}">
+                            ${formatPnL(pnl)}
+                        </strong>
+
+                    </div>
+
+                    <div class="trade-date">
+                        ${escapeHTML(date)}
+                    </div>
+
+                </div>
+            `;
+
+        }).join("");
+
+    container.innerHTML = `
+        <div class="trade-history-list">
+            ${historyHTML}
+        </div>
+    `;
+}
+
+
+/* ================================
+   FORMAT TRADE DATE
+================================ */
+
+function formatTradeDate(value) {
+
+    if (!value) {
+        return "Unknown time";
+    }
+
+    try {
+
+        const date =
+            new Date(value);
+
+        if (Number.isNaN(
+            date.getTime()
+        )) {
+            return String(value);
+        }
+
+        return date.toLocaleString();
+
+    } catch (error) {
+
+        return String(value);
+    }
+}
+
+
+/* ================================
+   FORMAT P/L
+================================ */
+
+function formatPnL(value) {
+
+    const number =
+        Number(value || 0);
+
+    if (number > 0) {
+        return "+$" + number.toFixed(2);
+    }
+
+    if (number < 0) {
+        return "-$" + Math.abs(number).toFixed(2);
+    }
+
+    return "$0.00";
 }
 
 
@@ -358,7 +661,7 @@ function renderPositions(positions) {
 
                         <span class="${pnlClass}">
                             P/L:
-                            $${pnl.toFixed(2)}
+                            ${formatPnL(pnl)}
                         </span>
 
                     </div>
