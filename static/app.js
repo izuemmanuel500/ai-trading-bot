@@ -30,10 +30,6 @@ async function runBot() {
             );
         }
 
-        /*
-         * Find the AI analysis area.
-         * If it exists, display the result directly on the page.
-         */
         const analysisArea =
             document.querySelector("#analysisResult");
 
@@ -42,12 +38,13 @@ async function runBot() {
             : [];
 
         const reasonHTML = reasons.length > 0
-            ? reasons.map(reason =>
-                `<li>${escapeHTML(reason)}</li>`
-              ).join("")
+            ? reasons.map(function (reason) {
+                return `<li>${escapeHTML(reason)}</li>`;
+            }).join("")
             : "<li>No reasons returned.</li>";
 
         if (analysisArea) {
+
             analysisArea.innerHTML = `
                 <div class="analysis-result">
 
@@ -57,13 +54,17 @@ async function runBot() {
                     </div>
 
                     <div class="signal-box">
+
                         <div class="signal-label">
                             SIGNAL
                         </div>
 
                         <div class="signal-value">
-                            ${escapeHTML(data.signal || "HOLD")}
+                            ${escapeHTML(
+                                data.signal || "HOLD"
+                            )}
                         </div>
+
                     </div>
 
                     <div class="analysis-grid">
@@ -71,21 +72,27 @@ async function runBot() {
                         <div class="analysis-item">
                             <span>Market</span>
                             <strong>
-                                ${escapeHTML(data.market || market)}
+                                ${escapeHTML(
+                                    data.market || market
+                                )}
                             </strong>
                         </div>
 
                         <div class="analysis-item">
                             <span>Price</span>
                             <strong>
-                                $${Number(data.price || 0).toFixed(4)}
+                                $${Number(
+                                    data.price || 0
+                                ).toFixed(4)}
                             </strong>
                         </div>
 
                         <div class="analysis-item">
                             <span>Confidence</span>
                             <strong>
-                                ${Number(data.confidence || 0)}%
+                                ${Number(
+                                    data.confidence || 0
+                                )}%
                             </strong>
                         </div>
 
@@ -93,7 +100,8 @@ async function runBot() {
                             <span>Market Strength</span>
                             <strong>
                                 ${escapeHTML(
-                                    data.market_strength || "NEUTRAL"
+                                    data.market_strength ||
+                                    "NEUTRAL"
                                 )}
                             </strong>
                         </div>
@@ -102,7 +110,8 @@ async function runBot() {
                             <span>Risk Level</span>
                             <strong>
                                 ${escapeHTML(
-                                    data.risk_level || "LOW"
+                                    data.risk_level ||
+                                    "LOW"
                                 )}
                             </strong>
                         </div>
@@ -110,15 +119,22 @@ async function runBot() {
                     </div>
 
                     <div class="reasons-section">
-                        <h3>📊 Why TradeMind Chose This</h3>
+
+                        <h3>
+                            📊 Why TradeMind Chose This
+                        </h3>
 
                         <ul>
                             ${reasonHTML}
                         </ul>
+
                     </div>
 
                     <div class="message-section">
-                        <h3>💬 AI Explanation</h3>
+
+                        <h3>
+                            💬 AI Explanation
+                        </h3>
 
                         <p>
                             ${escapeHTML(
@@ -127,6 +143,7 @@ async function runBot() {
                                 "No explanation available."
                             )}
                         </p>
+
                     </div>
 
                     ${
@@ -141,58 +158,66 @@ async function runBot() {
 
                 </div>
             `;
+
         } else {
-            /*
-             * Fallback if the dashboard does not yet
-             * contain #analysisResult.
-             */
+
             alert(
                 "🤖 TradeMind AI Result\n\n" +
-                "Market: " + data.market + "\n" +
-                "Signal: " + data.signal + "\n" +
+                "Market: " +
+                (data.market || market) +
+                "\n" +
+                "Signal: " +
+                (data.signal || "HOLD") +
+                "\n" +
                 "Price: $" +
-                Number(data.price).toFixed(4) + "\n" +
+                Number(data.price || 0).toFixed(4) +
+                "\n" +
                 "Confidence: " +
-                data.confidence + "%\n" +
+                (data.confidence || 0) +
+                "%\n" +
                 "Market Strength: " +
-                data.market_strength + "\n" +
+                (data.market_strength || "NEUTRAL") +
+                "\n" +
                 "Risk Level: " +
-                data.risk_level + "\n\n" +
+                (data.risk_level || "LOW") +
+                "\n\n" +
                 "📊 REASONS\n" +
-                reasons.map(
-                    reason => "• " + reason
-                ).join("\n") +
+                reasons.map(function (reason) {
+                    return "• " + reason;
+                }).join("\n") +
                 "\n\n💬 " +
                 (data.message || "")
             );
         }
 
-        /*
-         * Refresh the dashboard data after the trade,
-         * but do NOT reload the whole page.
-         */
         await refreshDashboard();
 
     } catch (error) {
-        console.error("TradeMind error:", error);
+
+        console.error(
+            "TradeMind error:",
+            error
+        );
 
         alert(
             "❌ TradeMind error:\n\n" +
             error.message
         );
+
     } finally {
+
         if (button) {
             button.disabled = false;
-            button.textContent = "🤖 Run AI Trader";
+            button.textContent =
+                "🤖 Run AI Trader";
         }
     }
 }
 
 
-/*
- * Safely display text returned by the server.
- */
+/* Safely display server text */
 function escapeHTML(value) {
+
     return String(value)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -202,21 +227,20 @@ function escapeHTML(value) {
 }
 
 
-/*
- * Refresh portfolio information without
- * refreshing the entire webpage.
- */
+/* Refresh portfolio information */
 async function refreshDashboard() {
+
     try {
-        const response = await fetch(
-            "/api/portfolio"
-        );
+
+        const response =
+            await fetch("/api/portfolio");
 
         if (!response.ok) {
             return;
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         updateElement(
             "#cashValue",
@@ -247,6 +271,7 @@ async function refreshDashboard() {
         );
 
     } catch (error) {
+
         console.log(
             "Portfolio refresh skipped:",
             error.message
@@ -255,7 +280,9 @@ async function refreshDashboard() {
 }
 
 
+/* Update an element */
 function updateElement(selector, value) {
+
     const element =
         document.querySelector(selector);
 
@@ -265,17 +292,19 @@ function updateElement(selector, value) {
 }
 
 
+/* Format money */
 function formatMoney(value) {
-    const number = Number(value || 0);
+
+    const number =
+        Number(value || 0);
 
     return "$" + number.toFixed(2);
 }
 
 
-/*
- * Change selected market.
- */
+/* Change selected market */
 function changeMarket() {
+
     const marketSelect =
         document.querySelector("#marketSelect");
 
@@ -293,14 +322,12 @@ function changeMarket() {
 }
 
 
-/*
- * Select a market from another dashboard
- * element or market card.
- */
+/* Select a market */
 function selectMarket(symbol) {
+
     const market =
         encodeURIComponent(symbol);
 
     window.location.href =
         "/?market=" + market;
-                                    }
+            }
