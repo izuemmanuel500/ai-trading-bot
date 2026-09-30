@@ -1,57 +1,112 @@
 async function runBot() {
-    const button = document.querySelector("#runBotButton");
-    const marketSelect = document.querySelector("#marketSelect");
 
-    const market = marketSelect
-        ? marketSelect.value
-        : "BTC/USD";
+    const button =
+        document.querySelector("#runBotButton");
+
+    const marketSelect =
+        document.querySelector("#marketSelect");
+
+    const market =
+        marketSelect
+            ? marketSelect.value
+            : "BTC/USD";
+
 
     if (button) {
+
         button.disabled = true;
-        button.textContent = "🤖 Analyzing...";
+
+        button.textContent =
+            "🤖 Analyzing...";
+
     }
 
-    try {
-        const response = await fetch("/api/run", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                market: market
-            })
-        });
 
-        const data = await response.json();
+    try {
+
+        const response =
+            await fetch("/api/run", {
+
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body: JSON.stringify({
+                    market: market
+                })
+
+            });
+
+
+        const data =
+            await response.json();
+
 
         if (!response.ok) {
+
             throw new Error(
-                data.error || "Market analysis failed"
+                data.error ||
+                "Market analysis failed"
             );
+
         }
 
+
+        /*
+         * ============================
+         * AI ANALYSIS
+         * ============================
+         */
+
         const analysisArea =
-            document.querySelector("#analysisResult");
+            document.querySelector(
+                "#analysisResult"
+            );
 
-        const reasons = Array.isArray(data.reasons)
-            ? data.reasons
-            : [];
 
-        const reasonHTML = reasons.length > 0
-            ? reasons.map(function (reason) {
-                return `<li>${escapeHTML(reason)}</li>`;
-            }).join("")
-            : "<li>No reasons returned.</li>";
+        const reasons =
+            Array.isArray(data.reasons)
+                ? data.reasons
+                : [];
+
+
+        const reasonHTML =
+            reasons.length > 0
+
+                ? reasons.map(function (reason) {
+
+                    return `
+                        <li>
+                            ${escapeHTML(reason)}
+                        </li>
+                    `;
+
+                }).join("")
+
+                : "<li>No reasons returned.</li>";
+
 
         if (analysisArea) {
 
             analysisArea.innerHTML = `
+
                 <div class="analysis-result">
 
                     <div class="analysis-header">
-                        <span>🤖 TradeMind AI</span>
-                        <span class="live-badge">LIVE</span>
+
+                        <span>
+                            🤖 TradeMind AI
+                        </span>
+
+                        <span class="live-badge">
+                            LIVE
+                        </span>
+
                     </div>
+
 
                     <div class="signal-box">
 
@@ -61,62 +116,97 @@ async function runBot() {
 
                         <div class="signal-value">
                             ${escapeHTML(
-                                data.signal || "HOLD"
+                                data.signal ||
+                                "HOLD"
                             )}
                         </div>
 
                     </div>
 
+
                     <div class="analysis-grid">
 
-                        <div class="analysis-item">
-                            <span>Market</span>
-                            <strong>
-                                ${escapeHTML(
-                                    data.market || market
-                                )}
-                            </strong>
-                        </div>
 
                         <div class="analysis-item">
-                            <span>Price</span>
+
+                            <span>
+                                Market
+                            </span>
+
+                            <strong>
+                                ${escapeHTML(
+                                    data.market ||
+                                    market
+                                )}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="analysis-item">
+
+                            <span>
+                                Price
+                            </span>
+
                             <strong>
                                 $${Number(
                                     data.price || 0
                                 ).toFixed(4)}
                             </strong>
+
                         </div>
 
+
                         <div class="analysis-item">
-                            <span>Confidence</span>
+
+                            <span>
+                                Confidence
+                            </span>
+
                             <strong>
                                 ${Number(
                                     data.confidence || 0
                                 )}%
                             </strong>
+
                         </div>
 
+
                         <div class="analysis-item">
-                            <span>Market Strength</span>
+
+                            <span>
+                                Market Strength
+                            </span>
+
                             <strong>
                                 ${escapeHTML(
                                     data.market_strength ||
                                     "NEUTRAL"
                                 )}
                             </strong>
+
                         </div>
 
+
                         <div class="analysis-item">
-                            <span>Risk Level</span>
+
+                            <span>
+                                Risk Level
+                            </span>
+
                             <strong>
                                 ${escapeHTML(
                                     data.risk_level ||
                                     "LOW"
                                 )}
                             </strong>
+
                         </div>
 
+
                     </div>
+
 
                     <div class="reasons-section">
 
@@ -129,6 +219,7 @@ async function runBot() {
                         </ul>
 
                     </div>
+
 
                     <div class="message-section">
 
@@ -146,51 +237,32 @@ async function runBot() {
 
                     </div>
 
+
                     ${
                         data.paper_only
                             ? `
-                            <div class="paper-warning">
-                                ⚠️ PAPER TRADING ONLY
-                            </div>
+                                <div class="paper-warning">
+                                    ⚠️ PAPER TRADING ONLY
+                                </div>
                             `
                             : ""
                     }
 
                 </div>
+
             `;
 
-        } else {
-
-            alert(
-                "🤖 TradeMind AI Result\n\n" +
-                "Market: " +
-                (data.market || market) +
-                "\n" +
-                "Signal: " +
-                (data.signal || "HOLD") +
-                "\n" +
-                "Price: $" +
-                Number(data.price || 0).toFixed(4) +
-                "\n" +
-                "Confidence: " +
-                (data.confidence || 0) +
-                "%\n" +
-                "Market Strength: " +
-                (data.market_strength || "NEUTRAL") +
-                "\n" +
-                "Risk Level: " +
-                (data.risk_level || "LOW") +
-                "\n\n" +
-                "📊 REASONS\n" +
-                reasons.map(function (reason) {
-                    return "• " + reason;
-                }).join("\n") +
-                "\n\n💬 " +
-                (data.message || "")
-            );
         }
 
+
+        /*
+         * ============================
+         * REFRESH EVERYTHING
+         * ============================
+         */
+
         await refreshDashboard();
+
 
     } catch (error) {
 
@@ -199,76 +271,117 @@ async function runBot() {
             error
         );
 
+
         alert(
             "❌ TradeMind error:\n\n" +
             error.message
         );
 
+
     } finally {
 
         if (button) {
+
             button.disabled = false;
+
             button.textContent =
                 "🤖 Run AI Trader";
+
         }
+
     }
+
 }
 
 
-/* Safely display server text */
-function escapeHTML(value) {
+/*
+ * ========================================
+ * REFRESH PORTFOLIO
+ * ========================================
+ */
 
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-
-/* Refresh portfolio information */
 async function refreshDashboard() {
 
     try {
 
         const response =
-            await fetch("/api/portfolio");
+            await fetch(
+                "/api/portfolio",
+                {
+                    cache: "no-store"
+                }
+            );
+
 
         if (!response.ok) {
-            return;
+
+            throw new Error(
+                "Portfolio request failed"
+            );
+
         }
+
 
         const data =
             await response.json();
 
+
+        /*
+         * CASH
+         */
+
+        const cash =
+            data.cash !== undefined
+                ? data.cash
+                : data.balance;
+
+
         updateElement(
             "#cashValue",
-            formatMoney(
-                data.cash !== undefined
-                    ? data.cash
-                    : data.balance
-            )
+            formatMoney(cash)
         );
+
+
+        /*
+         * PORTFOLIO VALUE
+         */
+
+        const totalValue =
+            data.total_value !== undefined
+                ? data.total_value
+                : data.balance;
+
 
         updateElement(
             "#portfolioValue",
-            formatMoney(
-                data.total_value !== undefined
-                    ? data.total_value
-                    : data.balance
-            )
+            formatMoney(totalValue)
         );
+
+
+        /*
+         * POSITIONS COUNT
+         */
 
         const positions =
             Array.isArray(data.positions)
                 ? data.positions
                 : [];
 
+
         updateElement(
             "#positionsCount",
             positions.length
         );
+
+
+        /*
+         * RENDER OPEN POSITIONS
+         */
+
+        renderPositions(
+            positions
+        );
+
 
     } catch (error) {
 
@@ -276,58 +389,312 @@ async function refreshDashboard() {
             "Portfolio refresh skipped:",
             error.message
         );
+
     }
+
 }
 
 
-/* Update an element */
-function updateElement(selector, value) {
+/*
+ * ========================================
+ * RENDER PAPER POSITIONS
+ * ========================================
+ */
+
+function renderPositions(positions) {
+
+    const container =
+        document.querySelector(
+            "#positionsContainer"
+        );
+
+
+    if (!container) {
+        return;
+    }
+
+
+    /*
+     * NO POSITIONS
+     */
+
+    if (!positions.length) {
+
+        container.innerHTML = `
+
+            <div class="empty-state">
+
+                <div class="empty-icon">
+                    📊
+                </div>
+
+                <h4>
+                    No open positions
+                </h4>
+
+                <p>
+                    Your paper portfolio is
+                    currently holding no positions.
+                </p>
+
+            </div>
+
+        `;
+
+        return;
+    }
+
+
+    /*
+     * POSITIONS EXIST
+     */
+
+    const positionHTML =
+        positions.map(function (position) {
+
+            const pnl =
+                Number(
+                    position.pnl || 0
+                );
+
+
+            const pnlClass =
+                pnl > 0
+                    ? "profit"
+                    : pnl < 0
+                        ? "loss"
+                        : "";
+
+
+            return `
+
+                <div class="position-card">
+
+
+                    <div>
+
+                        <strong>
+                            ${escapeHTML(
+                                position.market ||
+                                "UNKNOWN"
+                            )}
+                        </strong>
+
+                        <span>
+                            Qty:
+                            ${Number(
+                                position.quantity || 0
+                            ).toFixed(8)}
+                        </span>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>
+                            Entry:
+                            $${Number(
+                                position.avg_price || 0
+                            ).toFixed(4)}
+                        </span>
+
+
+                        <span>
+                            Current:
+                            $${Number(
+                                position.current_price || 0
+                            ).toFixed(4)}
+                        </span>
+
+                    </div>
+
+
+                    <div>
+
+                        <strong>
+                            Value:
+                            $${Number(
+                                position.value || 0
+                            ).toFixed(2)}
+                        </strong>
+
+
+                        <span class="${pnlClass}">
+
+                            P/L:
+                            $${pnl.toFixed(2)}
+
+                        </span>
+
+                    </div>
+
+
+                </div>
+
+            `;
+
+        }).join("");
+
+
+    container.innerHTML = `
+
+        <div class="positions">
+
+            ${positionHTML}
+
+        </div>
+
+    `;
+
+}
+
+
+/*
+ * ========================================
+ * SAFE HTML
+ * ========================================
+ */
+
+function escapeHTML(value) {
+
+    return String(value)
+
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+
+        .replace(
+            /</g,
+            "&lt;"
+        )
+
+        .replace(
+            />/g,
+            "&gt;"
+        )
+
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+
+}
+
+
+/*
+ * ========================================
+ * UPDATE ELEMENT
+ * ========================================
+ */
+
+function updateElement(
+    selector,
+    value
+) {
 
     const element =
-        document.querySelector(selector);
+        document.querySelector(
+            selector
+        );
+
 
     if (element) {
-        element.textContent = value;
+
+        element.textContent =
+            value;
+
     }
+
 }
 
 
-/* Format money */
+/*
+ * ========================================
+ * FORMAT MONEY
+ * ========================================
+ */
+
 function formatMoney(value) {
 
     const number =
         Number(value || 0);
 
-    return "$" + number.toFixed(2);
+
+    return "$" +
+        number.toFixed(2);
+
 }
 
 
-/* Change selected market */
+/*
+ * ========================================
+ * CHANGE MARKET
+ * ========================================
+ */
+
 function changeMarket() {
 
     const marketSelect =
-        document.querySelector("#marketSelect");
+        document.querySelector(
+            "#marketSelect"
+        );
+
 
     if (!marketSelect) {
         return;
     }
+
 
     const market =
         encodeURIComponent(
             marketSelect.value
         );
 
+
     window.location.href =
         "/?market=" + market;
+
 }
 
 
-/* Select a market */
+/*
+ * ========================================
+ * SELECT MARKET
+ * ========================================
+ */
+
 function selectMarket(symbol) {
 
     const market =
-        encodeURIComponent(symbol);
+        encodeURIComponent(
+            symbol
+        );
+
 
     window.location.href =
         "/?market=" + market;
-            }
+
+}
+
+
+/*
+ * ========================================
+ * INITIAL PORTFOLIO LOAD
+ * ========================================
+ */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+        refreshDashboard();
+
+    }
+);
