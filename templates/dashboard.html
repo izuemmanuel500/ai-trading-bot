@@ -2,156 +2,245 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
     <title>TradeMind AI Paper Trading</title>
 
     <link rel="stylesheet"
-          href="{{ url_for('static', filename='style.css', v='3') }}">
+          href="{{ url_for('static', filename='style.css', v='4') }}">
 </head>
 
 <body>
 
 <header class="topbar">
+
     <div class="brand">
-        <div class="brand-logo">TM</div>
+
+        <div class="brand-logo">
+            TM
+        </div>
 
         <div>
             <h2>TradeMind</h2>
             <p>AI Paper Trading</p>
         </div>
+
     </div>
 
     <div class="paper-status">
         <span class="status-dot"></span>
         PAPER MODE
     </div>
+
 </header>
 
 
 <main class="container">
 
-    <section class="hero">
-        <div class="eyebrow">AI MARKET ANALYSIS</div>
 
-        <h1>Trade smarter.<br>Test safely.</h1>
+    <!-- HERO -->
+
+    <section class="hero">
+
+        <div class="eyebrow">
+            AI MARKET ANALYSIS
+        </div>
+
+        <h1>
+            Trade smarter.<br>
+            Test safely.
+        </h1>
 
         <p>
             Analyze multiple markets with TradeMind's
             paper-trading engine. No real money is used.
         </p>
+
     </section>
 
+
+    <!-- MARKET SELECTOR -->
 
     <section class="market-card">
 
         <div class="market-summary">
-            <strong>{{ selected_market }}</strong>
+
+            <strong>
+                {{ selected_market }}
+            </strong>
 
             <span>
                 ${{ "%.4f"|format(price|default(0, true)) }}
             </span>
+
         </div>
+
 
         <label for="marketSelect">
             Choose market
         </label>
 
+
         <select id="marketSelect"
                 onchange="changeMarket()">
 
             {% for symbol, info in markets.items() %}
+
                 <option value="{{ symbol }}"
                     {% if symbol == selected_market %}
                         selected
                     {% endif %}>
+
                     {{ info.name }} — {{ symbol }}
+
                 </option>
+
             {% endfor %}
 
         </select>
 
+
         <button id="runBotButton"
                 class="run-button"
                 onclick="runBot()">
+
             🤖 Run AI Trader
+
         </button>
 
     </section>
 
 
+    <!-- QUICK STATS -->
+
     <section class="stats-grid">
 
-        <div class="stat-card">
-            <span>Market Price</span>
 
-            <strong>
-                ${{ "%.4f"|format(price|default(0, true)) }}
+        <div class="stat-card">
+
+            <span>
+                Market Price
+            </span>
+
+            <strong id="marketPriceValue">
+
+                ${{ "%.4f"|format(
+                    price|default(0, true)
+                ) }}
+
             </strong>
 
-            <small>{{ selected_market }}</small>
+            <small>
+                {{ selected_market }}
+            </small>
+
         </div>
 
 
         <div class="stat-card">
-            <span>Paper Cash</span>
 
-            <strong>
+            <span>
+                Paper Cash
+            </span>
+
+            <strong id="cashValue">
+
                 ${{ "%.2f"|format(
                     portfolio.cash|default(1000, true)
                 ) }}
+
             </strong>
 
-            <small>Available balance</small>
+            <small>
+                Available balance
+            </small>
+
         </div>
 
 
         <div class="stat-card">
-            <span>Portfolio Value</span>
 
-            <strong>
+            <span>
+                Portfolio Value
+            </span>
+
+            <strong id="portfolioValue">
+
                 ${{ "%.2f"|format(
                     portfolio.total_value|default(1000, true)
                 ) }}
+
             </strong>
 
-            <small>Cash + positions</small>
+            <small>
+                Cash + positions
+            </small>
+
         </div>
 
 
         <div class="stat-card">
-            <span>Positions</span>
 
-            <strong>
+            <span>
+                Positions
+            </span>
+
+            <strong id="positionsCount">
+
                 {{ portfolio.positions|length }}
+
             </strong>
 
-            <small>Open paper positions</small>
+            <small>
+                Open paper positions
+            </small>
+
         </div>
+
 
     </section>
 
 
+    <!-- AI ANALYSIS -->
+
     <section class="section">
 
-        <div class="eyebrow">AI ENGINE</div>
+        <div class="eyebrow">
+            AI ENGINE
+        </div>
 
-        <h2>Current Analysis</h2>
+        <h2>
+            Current Analysis
+        </h2>
 
-        <div class="analysis-card">
+
+        <!-- IMPORTANT:
+             JavaScript writes the live AI result here.
+        -->
+
+        <div id="analysisResult"
+             class="analysis-card">
+
 
             <div class="analysis-status">
                 LIVE DATA
             </div>
 
+
             <p>
                 Selected market
-                <strong>{{ selected_market }}</strong>
+
+                <strong>
+                    {{ selected_market }}
+                </strong>
             </p>
+
 
             <p>
                 Current price
+
                 <strong>
                     ${{ "%.4f"|format(
                         price|default(0, true)
@@ -159,62 +248,125 @@
                 </strong>
             </p>
 
+
             <p>
                 Signal
-                <strong>READY</strong>
+
+                <strong>
+                    READY
+                </strong>
             </p>
 
+
             <p class="analysis-note">
-                Press <strong>Run AI Trader</strong> to analyze
-                the selected market and execute a paper trade
-                when the strategy produces a BUY or SELL signal.
+
+                Press
+                <strong>Run AI Trader</strong>
+                to analyze the selected market.
+
+                TradeMind will calculate the market
+                signal, confidence, market strength,
+                risk level and technical reasons.
+
+                All trades remain paper trades.
+
             </p>
+
 
         </div>
 
     </section>
 
 
+    <!-- RISK CONTROL -->
+
     <section class="section">
 
-        <div class="eyebrow">RISK CONTROL</div>
+        <div class="eyebrow">
+            RISK CONTROL
+        </div>
 
-        <h2>Protection</h2>
+        <h2>
+            Protection
+        </h2>
+
 
         <div class="risk-grid">
 
-            <div>
-                <span>Stop Loss</span>
-                <strong>ATR Based</strong>
-            </div>
 
             <div>
-                <span>Take Profit</span>
-                <strong>ATR Based</strong>
+
+                <span>
+                    Stop Loss
+                </span>
+
+                <strong>
+                    ATR Based
+                </strong>
+
             </div>
 
-            <div>
-                <span>Trade Size</span>
-                <strong>$50</strong>
-            </div>
 
             <div>
-                <span>Real Money</span>
-                <strong>DISABLED</strong>
+
+                <span>
+                    Take Profit
+                </span>
+
+                <strong>
+                    ATR Based
+                </strong>
+
             </div>
+
+
+            <div>
+
+                <span>
+                    Trade Size
+                </span>
+
+                <strong>
+                    $50
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>
+                    Real Money
+                </span>
+
+                <strong>
+                    DISABLED
+                </strong>
+
+            </div>
+
 
         </div>
 
     </section>
 
 
+    <!-- SUPPORTED MARKETS -->
+
     <section class="section">
 
-        <div class="eyebrow">SUPPORTED MARKETS</div>
+        <div class="eyebrow">
+            SUPPORTED MARKETS
+        </div>
 
-        <h2>Choose a market</h2>
+        <h2>
+            Choose a market
+        </h2>
 
-        <p class="muted">Twelve Data</p>
+        <p class="muted">
+            Twelve Data
+        </p>
+
 
         <div class="market-buttons">
 
@@ -225,7 +377,10 @@
                     onclick="selectMarket('{{ symbol }}')">
 
                     {{ info.name }}
-                    <strong>{{ symbol }}</strong>
+
+                    <strong>
+                        {{ symbol }}
+                    </strong>
 
                 </button>
 
@@ -236,21 +391,33 @@
     </section>
 
 
+    <!-- OPEN POSITIONS -->
+
     <section class="section">
 
-        <div class="eyebrow">OPEN POSITIONS</div>
+        <div class="eyebrow">
+            OPEN POSITIONS
+        </div>
 
-        <h2>Paper Portfolio</h2>
+        <h2>
+            Paper Portfolio
+        </h2>
+
 
         {% if portfolio.positions %}
 
+
             <div class="positions">
+
 
                 {% for position in portfolio.positions %}
 
+
                     <div class="position-card">
 
+
                         <div>
+
                             <strong>
                                 {{ position.market }}
                             </strong>
@@ -261,9 +428,12 @@
                                     position.quantity
                                 ) }}
                             </span>
+
                         </div>
 
+
                         <div>
+
                             <span>
                                 Entry:
                                 ${{ "%.4f"|format(
@@ -277,9 +447,12 @@
                                     position.current_price
                                 ) }}
                             </span>
+
                         </div>
 
+
                         <div>
+
                             <strong>
                                 Value:
                                 ${{ "%.2f"|format(
@@ -293,28 +466,42 @@
                                     position.pnl
                                 ) }}
                             </span>
+
                         </div>
+
 
                     </div>
 
+
                 {% endfor %}
 
+
             </div>
+
 
         {% else %}
 
+
             <div class="empty-state">
+
                 No open paper positions.
+
             </div>
 
+
         {% endif %}
+
 
     </section>
 
 
+    <!-- PAPER TRADING WARNING -->
+
     <section class="warning-card">
 
-        <strong>⚠️ PAPER TRADING ONLY</strong>
+        <strong>
+            ⚠️ PAPER TRADING ONLY
+        </strong>
 
         <p>
             TradeMind currently uses simulated money.
@@ -323,15 +510,16 @@
 
     </section>
 
+
 </main>
 
 
 <script src="{{ url_for(
     'static',
     filename='app.js',
-    v='3'
+    v='4'
 ) }}"></script>
 
+
 </body>
-    </html>
-            
+                    </html>
