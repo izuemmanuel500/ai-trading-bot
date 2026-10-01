@@ -773,6 +773,16 @@ document.addEventListener(
     "DOMContentLoaded",
     function () {
 
+        const runButton =
+            document.querySelector("#runBotButton");
+
+        if (runButton) {
+            runButton.addEventListener(
+                "click",
+                runBot
+            );
+        }
+
         refreshDashboard();
 
     }
