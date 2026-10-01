@@ -242,45 +242,93 @@ def twelve_data_request(endpoint, params):
     return data
 
 def get_candles(market, interval="1h", outputsize=100):
-    if market not in MARKETS: raise ValueError("Unsupported market.")
-    info=MARKETS[market]
-    try:
-        data=twelve_data_request("time_series",{
-            "symbol":info["symbol"],"interval":interval,
-            "outputsize":outputsize,"format":"JSON"})
-        values=data.get("values")
-        if values: return list(reversed(values)),interval
-        raise RuntimeError("Twelve Data returned no candle values.")
-    except RuntimeError as first:
-        if info["asset_type"]=="commodity" and interval!="1day":
-            try:
-                data=twelve_data_request("time_series",{
-                    "symbol":info["symbol"],"interval":"1day",
-                    "outputsize":outputsize,"format":"JSON"})
-                values=data.get("values")
-                if values: return list(reversed(values)),"1day"
-                raise RuntimeError("Twelve Data returned no daily candle values.")
-            except RuntimeError as second:
-                raise RuntimeError(
-                    f"{market} is not currently available from the Twelve Data "
-                    f"time-series endpoint for this API key/plan. 1h: {first} | "
-                    f"daily: {second}") from second
-        raise first
+    if market not in MARKETS:
+        raise ValueError("Unsupported market.")
+
+    info = MARKETS[market]
+    symbol = info["symbol"]
+    asset_type = info["asset_type"]
+
+    intervals = [interval]
+    if interval != "1day":
+        intervals.append("1day")
+
+    errors = []
+    for requested_interval in intervals:
+        try:
+            data = twelve_data_request(
+                "time_series",
+                {
+                    "symbol": symbol,
+                    "interval": requested_interval,
+                    "outputsize": outputsize,
+                    "format": "JSON"
+                }
+            )
+            values = data.get("values")
+            if values and len(values) >= 2:
+                return list(reversed(values)), requested_interval
+            errors.append(f"{requested_interval}: no candle values returned")
+        except Exception as exc:
+            errors.append(f"{requested_interval}: {exc}")
+
+    if asset_type == "forex":
+        raise RuntimeError(
+            f"{market} forex data could not be retrieved. " + " | ".join(errors)
+        )
+
+    if asset_type == "commodity":
+        raise RuntimeError(
+            f"{market} commodity data is not available to the current Twelve Data API key/plan. "
+            + " | ".join(errors)
+        )
+
+    raise RuntimeError(
+        f"{market} market data could not be retrieved. " + " | ".join(errors)
+    )
+
 
 def get_market_price(market):
-    if market not in MARKETS: raise ValueError("Unsupported market.")
-    info=MARKETS[market]
-    try:
-        data=twelve_data_request("price",{"symbol":info["symbol"]})
-        if "price" in data: return float(data["price"])
-        raise RuntimeError("Twelve Data did not return a price.")
-    except RuntimeError as price_error:
+    if market not in MARKETS:
+        raise ValueError("Unsupported market.")
+
+    info = MARKETS[market]
+    symbol = info["symbol"]
+    asset_type = info["asset_type"]
+
+    # Forex has a dedicated real-time exchange-rate endpoint.
+    if asset_type == "forex":
         try:
-            candles,_=get_candles(market,"1h",5)
-            if candles: return float(candles[-1]["close"])
+            data = twelve_data_request("exchange_rate", {"symbol": symbol})
+            if "rate" in data:
+                return float(data["rate"])
         except Exception:
             pass
-        raise RuntimeError(f"Unable to get current price for {market}: {price_error}") from price_error
+
+    # Use the normal lightweight price endpoint for crypto, gold,
+    # and any commodity symbols available to the API key/plan.
+    try:
+        data = twelve_data_request("price", {"symbol": symbol})
+        if "price" in data:
+            return float(data["price"])
+        price_error = RuntimeError("Twelve Data did not return a price.")
+    except Exception as exc:
+        price_error = exc
+
+    # Historical candle fallback.
+    try:
+        candles, _ = get_candles(market, "1h", 5)
+        if candles:
+            return float(candles[-1]["close"])
+    except Exception as candle_error:
+        raise RuntimeError(
+            f"Unable to get current price for {market}. "
+            f"Price endpoint: {price_error}. Candle fallback: {candle_error}"
+        ) from candle_error
+
+    raise RuntimeError(
+        f"Unable to get current price for {market}: {price_error}"
+    )
 
 def analyze_market(market):
     candles,data_interval=get_candles(market,"1h",100)
@@ -535,3 +583,4 @@ print("="*60)
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.getenv("PORT","5000")),debug=False)
+                                
