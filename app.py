@@ -22,6 +22,13 @@ TWELVE_DATA_URL = "https://api.twelvedata.com"
 TRADE_EXECUTION_LOCK = threading.Lock()
 LAST_TRADE_EXECUTION = {}
 
+# Twelve Data request cache. This keeps the free API plan from being hit
+# repeatedly when the dashboard refreshes or the same market is analyzed.
+MARKET_DATA_CACHE = {}
+MARKET_PRICE_CACHE = {}
+DATA_CACHE_TTL_SECONDS = 60
+PRICE_CACHE_TTL_SECONDS = 30
+
 MARKETS = {
     "BTC/USD": {"name": "Bitcoin", "symbol": "BTC/USD", "asset_type": "crypto"},
     "ETH/USD": {"name": "Ethereum", "symbol": "ETH/USD", "asset_type": "crypto"},
@@ -245,93 +252,113 @@ def get_candles(market, interval="1h", outputsize=100):
     if market not in MARKETS:
         raise ValueError("Unsupported market.")
 
+    # Reuse recent candles instead of spending another API credit.
+    cache_key = (market, interval, int(outputsize))
+    cached = MARKET_DATA_CACHE.get(cache_key)
+    if cached and (time.time() - cached["time"]) < DATA_CACHE_TTL_SECONDS:
+        return cached["candles"], cached["interval"]
+
     info = MARKETS[market]
     symbol = info["symbol"]
     asset_type = info["asset_type"]
 
-    intervals = [interval]
-    if interval != "1day":
-        intervals.append("1day")
-
-    errors = []
-    for requested_interval in intervals:
-        try:
-            data = twelve_data_request(
-                "time_series",
-                {
-                    "symbol": symbol,
-                    "interval": requested_interval,
-                    "outputsize": outputsize,
-                    "format": "JSON"
-                }
-            )
-            values = data.get("values")
-            if values and len(values) >= 2:
-                return list(reversed(values)), requested_interval
-            errors.append(f"{requested_interval}: no candle values returned")
-        except Exception as exc:
-            errors.append(f"{requested_interval}: {exc}")
-
-    if asset_type == "forex":
-        raise RuntimeError(
-            f"{market} forex data could not be retrieved. " + " | ".join(errors)
+    try:
+        data = twelve_data_request(
+            "time_series",
+            {
+                "symbol": symbol,
+                "interval": interval,
+                "outputsize": outputsize,
+                "format": "JSON"
+            }
         )
+        values = data.get("values")
+        if values and len(values) >= 2:
+            candles = list(reversed(values))
+            MARKET_DATA_CACHE[cache_key] = {
+                "time": time.time(),
+                "candles": candles,
+                "interval": interval
+            }
+            return candles, interval
+        raise RuntimeError("Twelve Data returned no candle values.")
+    except RuntimeError as exc:
+        message = str(exc)
+        # A 429 is a quota/rate-limit response. Do not immediately make
+        # another request with a different interval; that only consumes
+        # more requests while the quota is exhausted.
+        if "429" in message or "Too Many Requests" in message:
+            raise RuntimeError(
+                f"{market} data is temporarily rate-limited by Twelve Data. "
+                "Wait about 60 seconds and try again. The dashboard now caches "
+                "recent market data to reduce API usage."
+            ) from exc
 
-    if asset_type == "commodity":
-        raise RuntimeError(
-            f"{market} commodity data is not available to the current Twelve Data API key/plan. "
-            + " | ".join(errors)
-        )
+        if asset_type == "commodity":
+            raise RuntimeError(
+                f"{market} commodity data is not available to the current Twelve Data API key/plan. "
+                f"{message}"
+            ) from exc
 
-    raise RuntimeError(
-        f"{market} market data could not be retrieved. " + " | ".join(errors)
-    )
+        raise RuntimeError(f"{market} market data could not be retrieved: {message}") from exc
 
 
 def get_market_price(market):
     if market not in MARKETS:
         raise ValueError("Unsupported market.")
 
+    cached = MARKET_PRICE_CACHE.get(market)
+    if cached and (time.time() - cached["time"]) < PRICE_CACHE_TTL_SECONDS:
+        return float(cached["price"])
+
     info = MARKETS[market]
     symbol = info["symbol"]
     asset_type = info["asset_type"]
 
-    # Forex has a dedicated real-time exchange-rate endpoint.
-    if asset_type == "forex":
-        try:
+    try:
+        # Forex uses the dedicated exchange-rate endpoint.
+        if asset_type == "forex":
             data = twelve_data_request("exchange_rate", {"symbol": symbol})
             if "rate" in data:
-                return float(data["rate"])
-        except Exception:
-            pass
+                price = float(data["rate"])
+            else:
+                raise RuntimeError("Twelve Data did not return a forex rate.")
+        else:
+            data = twelve_data_request("price", {"symbol": symbol})
+            if "price" in data:
+                price = float(data["price"])
+            else:
+                raise RuntimeError("Twelve Data did not return a price.")
 
-    # Use the normal lightweight price endpoint for crypto, gold,
-    # and any commodity symbols available to the API key/plan.
-    try:
-        data = twelve_data_request("price", {"symbol": symbol})
-        if "price" in data:
-            return float(data["price"])
-        price_error = RuntimeError("Twelve Data did not return a price.")
-    except Exception as exc:
-        price_error = exc
+        MARKET_PRICE_CACHE[market] = {"time": time.time(), "price": price}
+        return price
 
-    # Historical candle fallback.
-    try:
-        candles, _ = get_candles(market, "1h", 5)
-        if candles:
-            return float(candles[-1]["close"])
-    except Exception as candle_error:
-        raise RuntimeError(
-            f"Unable to get current price for {market}. "
-            f"Price endpoint: {price_error}. Candle fallback: {candle_error}"
-        ) from candle_error
+    except RuntimeError as price_error:
+        message = str(price_error)
+        if "429" in message or "Too Many Requests" in message:
+            raise RuntimeError(
+                f"{market} price is temporarily rate-limited by Twelve Data. "
+                "Wait about 60 seconds and try again."
+            ) from price_error
 
-    raise RuntimeError(
-        f"Unable to get current price for {market}: {price_error}"
-    )
+        # Only use the candle cache/fallback when the price endpoint fails
+        # for a non-rate-limit reason. get_candles itself is cached.
+        try:
+            candles, _ = get_candles(market, "1h", 60)
+            if candles:
+                price = float(candles[-1]["close"])
+                MARKET_PRICE_CACHE[market] = {"time": time.time(), "price": price}
+                return price
+        except Exception as candle_error:
+            raise RuntimeError(
+                f"Unable to get current price for {market}. "
+                f"Price endpoint: {message}. Candle fallback: {candle_error}"
+            ) from candle_error
+
+        raise RuntimeError(f"Unable to get current price for {market}: {message}")
 
 def analyze_market(market):
-    candles,data_interval=get_candles(market,"1h",100)
+    candles,data_interval=get_candles(market,"1h",60)
     closes=[float(c["close"]) for c in candles]
     if len(closes)<60:
         raise RuntimeError(f"Not enough candle data for {market}. Received {len(closes)} candles.")
@@ -583,3 +610,4 @@ print("="*60)
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.getenv("PORT","5000")),debug=False)
+    
