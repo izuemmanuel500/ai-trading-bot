@@ -7,11 +7,13 @@ from flask import Flask, jsonify, render_template, request
 
 
 # ============================================================
-# TRADEMIND V3
+# TRADEMIND V4
 # AI PAPER TRADING ENGINE
 #
 # REAL MONEY: DISABLED
 # ALL TRADES ARE SIMULATED
+#
+# LONG PAPER TRADING ONLY
 # ============================================================
 
 app = Flask(__name__)
@@ -41,42 +43,34 @@ MARKETS = {
         "name": "Bitcoin",
         "symbol": "BTC/USD"
     },
-
     "ETH/USD": {
         "name": "Ethereum",
         "symbol": "ETH/USD"
     },
-
     "EUR/USD": {
         "name": "Euro / US Dollar",
         "symbol": "EUR/USD"
     },
-
     "GBP/USD": {
         "name": "British Pound / US Dollar",
         "symbol": "GBP/USD"
     },
-
     "USD/JPY": {
         "name": "US Dollar / Japanese Yen",
         "symbol": "USD/JPY"
     },
-
     "GBP/JPY": {
         "name": "British Pound / Japanese Yen",
         "symbol": "GBP/JPY"
     },
-
     "XAU/USD": {
         "name": "Gold",
         "symbol": "XAU/USD"
     },
-
     "XAG/USD": {
         "name": "Silver",
         "symbol": "XAG/USD"
     },
-
     "WTI/USD": {
         "name": "WTI Crude Oil",
         "symbol": "WTI/USD"
@@ -135,8 +129,7 @@ def initialize_database():
 
         conn.execute(
             """
-            INSERT INTO account
-            (id, balance)
+            INSERT INTO account (id, balance)
             VALUES (1, ?)
             """,
             (STARTING_BALANCE,)
@@ -303,15 +296,12 @@ def ema(values, period):
 
     multiplier = 2 / (period + 1)
 
-    result = sum(
-        values[:period]
-    ) / period
+    result = sum(values[:period]) / period
 
     for price in values[period:]:
 
         result = (
-            (price - result)
-            * multiplier
+            (price - result) * multiplier
         ) + result
 
     return result
@@ -327,47 +317,23 @@ def rsi(values, period=14):
 
     for i in range(1, len(values)):
 
-        change = (
-            values[i]
-            - values[i - 1]
-        )
+        change = values[i] - values[i - 1]
 
-        gains.append(
-            max(change, 0)
-        )
+        gains.append(max(change, 0))
+        losses.append(max(-change, 0))
 
-        losses.append(
-            max(-change, 0)
-        )
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
 
-    avg_gain = (
-        sum(gains[:period])
-        / period
-    )
-
-    avg_loss = (
-        sum(losses[:period])
-        / period
-    )
-
-    for i in range(
-        period,
-        len(gains)
-    ):
+    for i in range(period, len(gains)):
 
         avg_gain = (
-            (
-                avg_gain
-                * (period - 1)
-            )
+            (avg_gain * (period - 1))
             + gains[i]
         ) / period
 
         avg_loss = (
-            (
-                avg_loss
-                * (period - 1)
-            )
+            (avg_loss * (period - 1))
             + losses[i]
         ) / period
 
@@ -376,9 +342,7 @@ def rsi(values, period=14):
 
     rs = avg_gain / avg_loss
 
-    return 100 - (
-        100 / (1 + rs)
-    )
+    return 100 - (100 / (1 + rs))
 
 
 def macd(values):
@@ -388,25 +352,12 @@ def macd(values):
 
     macd_values = []
 
-    for i in range(
-        26,
-        len(values)
-    ):
+    for i in range(26, len(values)):
 
-        fast = ema(
-            values[:i + 1],
-            12
-        )
+        fast = ema(values[:i + 1], 12)
+        slow = ema(values[:i + 1], 26)
 
-        slow = ema(
-            values[:i + 1],
-            26
-        )
-
-        if (
-            fast is not None
-            and slow is not None
-        ):
+        if fast is not None and slow is not None:
 
             macd_values.append(
                 fast - slow
@@ -432,46 +383,28 @@ def atr(candles, period=14):
 
     true_ranges = []
 
-    for i in range(
-        1,
-        len(candles)
-    ):
+    for i in range(1, len(candles)):
 
-        high = float(
-            candles[i]["high"]
-        )
-
-        low = float(
-            candles[i]["low"]
-        )
-
+        high = float(candles[i]["high"])
+        low = float(candles[i]["low"])
         previous_close = float(
             candles[i - 1]["close"]
         )
 
         true_range = max(
             high - low,
-            abs(
-                high
-                - previous_close
-            ),
-            abs(
-                low
-                - previous_close
-            )
+            abs(high - previous_close),
+            abs(low - previous_close)
         )
 
-        true_ranges.append(
-            true_range
-        )
+        true_ranges.append(true_range)
 
     if len(true_ranges) < period:
         return None
 
-    return (
-        sum(true_ranges[-period:])
-        / period
-    )
+    return sum(
+        true_ranges[-period:]
+    ) / period
 
 
 # ============================================================
@@ -523,9 +456,7 @@ def get_candles(
             "No market data was returned."
         )
 
-    return list(
-        reversed(values)
-    )
+    return list(reversed(values))
 
 
 def get_market_price(market):
@@ -564,13 +495,11 @@ def get_market_price(market):
             "Twelve Data did not return a price."
         )
 
-    return float(
-        data["price"]
-    )
+    return float(data["price"])
 
 
 # ============================================================
-# AI CONFIDENCE
+# CONFIDENCE
 # ============================================================
 
 def calculate_confidence(
@@ -582,74 +511,37 @@ def calculate_confidence(
     macd_signal
 ):
 
-    """
-    Heuristic indicator agreement.
-    This is NOT a machine-learning probability.
-    """
-
     confidence = 50
 
     if score in (3, -3):
-
         confidence += 25
 
     elif score in (2, -2):
-
         confidence += 15
 
     elif score in (1, -1):
-
         confidence += 5
 
-    if (
-        ema_fast is not None
-        and ema_slow is not None
-    ):
+    if ema_fast is not None and ema_slow is not None:
 
-        if (
-            score > 0
-            and ema_fast > ema_slow
-        ):
-
+        if score > 0 and ema_fast > ema_slow:
             confidence += 5
 
-        elif (
-            score < 0
-            and ema_fast < ema_slow
-        ):
-
+        elif score < 0 and ema_fast < ema_slow:
             confidence += 5
 
-    if (
-        current_macd is not None
-        and macd_signal is not None
-    ):
+    if current_macd is not None and macd_signal is not None:
 
-        if (
-            score > 0
-            and current_macd > macd_signal
-        ):
-
+        if score > 0 and current_macd > macd_signal:
             confidence += 5
 
-        elif (
-            score < 0
-            and current_macd < macd_signal
-        ):
-
+        elif score < 0 and current_macd < macd_signal:
             confidence += 5
 
-    if (
-        current_rsi is not None
-        and 40 <= current_rsi <= 60
-    ):
-
+    if current_rsi is not None and 40 <= current_rsi <= 60:
         confidence -= 5
 
-    return max(
-        0,
-        min(100, confidence)
-    )
+    return max(0, min(100, confidence))
 
 
 # ============================================================
@@ -671,43 +563,25 @@ def analyze_market(market):
 
     price = closes[-1]
 
-    ema_fast = ema(
-        closes,
-        12
-    )
+    ema_fast = ema(closes, 12)
+    ema_slow = ema(closes, 26)
 
-    ema_slow = ema(
-        closes,
-        26
-    )
+    current_rsi = rsi(closes, 14)
 
-    current_rsi = rsi(
-        closes,
-        14
-    )
+    current_macd, macd_signal = macd(closes)
 
-    current_macd, macd_signal = macd(
-        closes
-    )
-
-    current_atr = atr(
-        candles,
-        14
-    )
+    current_atr = atr(candles, 14)
 
     score = 0
 
     reasons = []
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # EMA
-    # --------------------------------------------------------
+    # ========================================================
 
-    if (
-        ema_fast is not None
-        and ema_slow is not None
-    ):
+    if ema_fast is not None and ema_slow is not None:
 
         if ema_fast > ema_slow:
 
@@ -726,9 +600,9 @@ def analyze_market(market):
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # RSI
-    # --------------------------------------------------------
+    # ========================================================
 
     if current_rsi is not None:
 
@@ -755,14 +629,11 @@ def analyze_market(market):
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # MACD
-    # --------------------------------------------------------
+    # ========================================================
 
-    if (
-        current_macd is not None
-        and macd_signal is not None
-    ):
+    if current_macd is not None and macd_signal is not None:
 
         if current_macd > macd_signal:
 
@@ -781,32 +652,29 @@ def analyze_market(market):
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # SIGNAL
-    # --------------------------------------------------------
+    # ========================================================
 
     if score >= 2:
 
         signal = "BUY"
-
         market_strength = "BULLISH"
 
     elif score <= -2:
 
         signal = "SELL"
-
         market_strength = "BEARISH"
 
     else:
 
         signal = "HOLD"
-
         market_strength = "NEUTRAL"
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # CONFIDENCE
-    # --------------------------------------------------------
+    # ========================================================
 
     confidence = calculate_confidence(
         score,
@@ -818,9 +686,9 @@ def analyze_market(market):
     )
 
 
-    # --------------------------------------------------------
-    # RISK
-    # --------------------------------------------------------
+    # ========================================================
+    # RISK LEVEL
+    # ========================================================
 
     if current_atr is None:
 
@@ -829,26 +697,22 @@ def analyze_market(market):
     else:
 
         atr_percent = (
-            current_atr
-            / price
+            current_atr / price
         ) * 100
 
         if atr_percent >= 3:
-
             risk_level = "HIGH"
 
         elif atr_percent >= 1:
-
             risk_level = "MEDIUM"
 
         else:
-
             risk_level = "LOW"
 
 
-    # --------------------------------------------------------
-    # STOP LOSS / TAKE PROFIT
-    # --------------------------------------------------------
+    # ========================================================
+    # SIGNAL-BASED REFERENCE LEVELS
+    # ========================================================
 
     stop_loss = None
     take_profit = None
@@ -859,42 +723,30 @@ def analyze_market(market):
 
             stop_loss = (
                 price
-                - (
-                    current_atr
-                    * STOP_LOSS_ATR_MULTIPLIER
-                )
+                - current_atr * STOP_LOSS_ATR_MULTIPLIER
             )
 
             take_profit = (
                 price
-                + (
-                    current_atr
-                    * TAKE_PROFIT_ATR_MULTIPLIER
-                )
+                + current_atr * TAKE_PROFIT_ATR_MULTIPLIER
             )
 
         elif signal == "SELL":
 
             stop_loss = (
                 price
-                + (
-                    current_atr
-                    * STOP_LOSS_ATR_MULTIPLIER
-                )
+                + current_atr * STOP_LOSS_ATR_MULTIPLIER
             )
 
             take_profit = (
                 price
-                - (
-                    current_atr
-                    * TAKE_PROFIT_ATR_MULTIPLIER
-                )
+                - current_atr * TAKE_PROFIT_ATR_MULTIPLIER
             )
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # EXPLANATION
-    # --------------------------------------------------------
+    # ========================================================
 
     if signal == "BUY":
 
@@ -977,9 +829,8 @@ def paper_buy(
 
         return {
             "action": "NONE",
-            "message": (
-                "Insufficient paper balance."
-            )
+            "executed": False,
+            "message": "Insufficient paper balance."
         }
 
     amount = min(
@@ -987,19 +838,14 @@ def paper_buy(
         balance
     )
 
-    quantity = (
-        amount
-        / price
-    )
+    quantity = amount / price
 
-    position = get_position(
-        market
-    )
+    position = get_position(market)
 
 
-    # --------------------------------------------------------
-    # ADD TO EXISTING POSITION
-    # --------------------------------------------------------
+    # ========================================================
+    # EXISTING POSITION
+    # ========================================================
 
     if position:
 
@@ -1012,19 +858,16 @@ def paper_buy(
         )
 
         new_quantity = (
-            old_quantity
-            + quantity
+            old_quantity + quantity
         )
 
         new_avg = (
             (
-                old_quantity
-                * old_avg
+                old_quantity * old_avg
             )
             +
             (
-                quantity
-                * price
+                quantity * price
             )
         ) / new_quantity
 
@@ -1047,10 +890,7 @@ def paper_buy(
         conn.commit()
         conn.close()
 
-
-    # --------------------------------------------------------
-    # OPEN NEW POSITION
-    # --------------------------------------------------------
+        message = "Paper BUY executed and position increased."
 
     else:
 
@@ -1076,19 +916,12 @@ def paper_buy(
         conn.commit()
         conn.close()
 
+        message = "Paper BUY executed. New position opened."
 
-    # --------------------------------------------------------
-    # REMOVE CASH
-    # --------------------------------------------------------
 
     set_balance(
         balance - amount
     )
-
-
-    # --------------------------------------------------------
-    # RECORD BUY
-    # --------------------------------------------------------
 
     record_trade(
         market,
@@ -1100,10 +933,11 @@ def paper_buy(
         signal
     )
 
-
     return {
 
         "action": "BUY",
+
+        "executed": True,
 
         "quantity": quantity,
 
@@ -1111,9 +945,7 @@ def paper_buy(
 
         "pnl": 0,
 
-        "message": (
-            "Paper BUY executed."
-        )
+        "message": message
     }
 
 
@@ -1127,20 +959,16 @@ def paper_sell(
     signal="SELL"
 ):
 
-    position = get_position(
-        market
-    )
+    position = get_position(market)
 
-
-    # --------------------------------------------------------
-    # NO POSITION
-    # --------------------------------------------------------
 
     if not position:
 
         return {
 
             "action": "NONE",
+
+            "executed": False,
 
             "message": (
                 "SELL signal detected, "
@@ -1152,10 +980,6 @@ def paper_sell(
         }
 
 
-    # --------------------------------------------------------
-    # CLOSE POSITION
-    # --------------------------------------------------------
-
     quantity = float(
         position["quantity"]
     )
@@ -1164,25 +988,18 @@ def paper_sell(
         position["avg_price"]
     )
 
-    value = (
-        quantity
-        * price
-    )
+    value = quantity * price
 
     pnl = (
-        price
-        - avg_price
+        price - avg_price
     ) * quantity
 
 
-    # Return cash
     set_balance(
-        get_balance()
-        + value
+        get_balance() + value
     )
 
 
-    # Delete position
     conn = db()
 
     conn.execute(
@@ -1197,7 +1014,6 @@ def paper_sell(
     conn.close()
 
 
-    # Record completed trade
     record_trade(
         market,
         "SELL",
@@ -1213,6 +1029,8 @@ def paper_sell(
 
         "action": "SELL",
 
+        "executed": True,
+
         "quantity": quantity,
 
         "value": value,
@@ -1227,7 +1045,12 @@ def paper_sell(
 
 
 # ============================================================
-# RISK MANAGEMENT
+# LONG POSITION RISK MANAGEMENT
+#
+# IMPORTANT FIX:
+# Risk levels are calculated from the EXISTING POSITION ENTRY
+# price, not from whether the current AI signal happens to be
+# BUY or SELL.
 # ============================================================
 
 def apply_risk_rules(
@@ -1236,9 +1059,7 @@ def apply_risk_rules(
     analysis
 ):
 
-    position = get_position(
-        market
-    )
+    position = get_position(market)
 
     if not position:
         return None
@@ -1248,61 +1069,162 @@ def apply_risk_rules(
         position["avg_price"]
     )
 
-    stop_loss = analysis.get(
-        "stop_loss"
-    )
-
-    take_profit = analysis.get(
-        "take_profit"
-    )
+    current_atr = analysis.get("atr")
 
 
-    # --------------------------------------------------------
-    # FALLBACK PROTECTION
-    # --------------------------------------------------------
+    # ========================================================
+    # If ATR is unavailable, use conservative fallback.
+    # ========================================================
 
-    if stop_loss is None:
+    if current_atr is not None:
 
         stop_loss = (
             avg_price
-            * 0.98
+            - current_atr * STOP_LOSS_ATR_MULTIPLIER
         )
-
-    if take_profit is None:
 
         take_profit = (
             avg_price
-            * 1.04
+            + current_atr * TAKE_PROFIT_ATR_MULTIPLIER
         )
 
+    else:
 
-    # --------------------------------------------------------
+        stop_loss = avg_price * 0.98
+
+        take_profit = avg_price * 1.04
+
+
+    # ========================================================
     # STOP LOSS
-    # --------------------------------------------------------
+    # ========================================================
 
     if price <= stop_loss:
 
-        return paper_sell(
+        result = paper_sell(
             market,
             price,
             "STOP LOSS"
         )
 
+        result["risk_triggered"] = "STOP LOSS"
 
-    # --------------------------------------------------------
+        return result
+
+
+    # ========================================================
     # TAKE PROFIT
-    # --------------------------------------------------------
+    # ========================================================
 
     if price >= take_profit:
 
-        return paper_sell(
+        result = paper_sell(
             market,
             price,
             "TAKE PROFIT"
         )
 
+        result["risk_triggered"] = "TAKE PROFIT"
+
+        return result
+
 
     return None
+
+
+# ============================================================
+# TRADE DECISION ENGINE
+# ============================================================
+
+def execute_trade_decision(
+    market,
+    analysis
+):
+
+    price = float(
+        analysis["price"]
+    )
+
+    signal = analysis["signal"]
+
+
+    # ========================================================
+    # PROTECTION FIRST
+    # ========================================================
+
+    risk_action = apply_risk_rules(
+        market,
+        price,
+        analysis
+    )
+
+    if risk_action:
+
+        return risk_action
+
+
+    # ========================================================
+    # BUY
+    # ========================================================
+
+    if signal == "BUY":
+
+        return paper_buy(
+            market,
+            price,
+            "BUY"
+        )
+
+
+    # ========================================================
+    # SELL
+    # ========================================================
+
+    if signal == "SELL":
+
+        position = get_position(
+            market
+        )
+
+        if position:
+
+            return paper_sell(
+                market,
+                price,
+                "SELL"
+            )
+
+        return {
+
+            "action": "NONE",
+
+            "executed": False,
+
+            "signal_only": True,
+
+            "message": (
+                "SELL signal detected, "
+                "but there is no open paper "
+                "position to close."
+            )
+        }
+
+
+    # ========================================================
+    # HOLD
+    # ========================================================
+
+    return {
+
+        "action": "HOLD",
+
+        "executed": False,
+
+        "message": (
+            "No paper trade executed. "
+            "TradeMind is waiting for stronger confirmation."
+        )
+    }
 
 
 # ============================================================
@@ -1332,7 +1254,6 @@ def get_portfolio():
             position["avg_price"]
         )
 
-
         try:
 
             price = get_market_price(
@@ -1344,16 +1265,11 @@ def get_portfolio():
             price = avg_price
 
 
-        value = (
-            quantity
-            * price
-        )
+        value = quantity * price
 
         pnl = (
-            price
-            - avg_price
+            price - avg_price
         ) * quantity
-
 
         holdings_value += value
 
@@ -1367,7 +1283,6 @@ def get_portfolio():
             "value": value,
 
             "pnl": pnl
-
         })
 
 
@@ -1380,13 +1295,10 @@ def get_portfolio():
         "holdings_value": holdings_value,
 
         "total_value": (
-            balance
-            + holdings_value
+            balance + holdings_value
         ),
 
-        "positions": (
-            enriched_positions
-        )
+        "positions": enriched_positions
     }
 
 
@@ -1401,7 +1313,6 @@ def dashboard():
         "market",
         "BTC/USD"
     )
-
 
     if selected_market not in MARKETS:
 
@@ -1427,7 +1338,6 @@ def dashboard():
             "total_value": balance,
 
             "positions": []
-
         }
 
 
@@ -1442,130 +1352,407 @@ def dashboard():
         price = 0.0
 
 
+    return render_template(
+        "dashboard.html",
+        market=selected_market,
+        selected_market=selected_market,
+        markets=MARKETS,
+        portfolio=portfolio,
+        price=price,
+        current_price=price
+    )
+
+
+# ============================================================
+# RUN AI TRADER
+# ============================================================
+
+@app.route(
+    "/api/run",
+    methods=["POST"]
+)
+def run_bot():
+
+    data = (
+        request.get_json(
+            silent=True
+        )
+        or {}
+    )
+
+    market = data.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+
+        return jsonify({
+
+            "success": False,
+
+            "error": "Unsupported market.",
+
+            "paper_only": True
+        }), 400
+
+
     try:
 
-        return render_template(
+        # ====================================================
+        # ANALYZE ONCE
+        # ====================================================
 
-            "dashboard.html",
-
-            market=selected_market,
-
-            selected_market=selected_market,
-
-            markets=MARKETS,
-
-            portfolio=portfolio,
-
-            price=price,
-
-            current_price=price
-
+        analysis = analyze_market(
+            market
         )
 
 
-    except Exception:
+        # ====================================================
+        # EXECUTE PAPER DECISION
+        # ====================================================
 
-        return f"""
-<!doctype html>
+        trade = execute_trade_decision(
+            market,
+            analysis
+        )
 
-<html lang="en">
 
-<head>
+        # ====================================================
+        # CURRENT POSITION AFTER DECISION
+        # ====================================================
 
-<meta charset="utf-8">
+        position = get_position(
+            market
+        )
 
-<meta name="viewport"
-content="width=device-width,initial-scale=1">
 
-<title>TradeMind</title>
+        # ====================================================
+        # CURRENT PORTFOLIO
+        # ====================================================
 
-<style>
+        portfolio = get_portfolio()
 
-body {{
-    font-family: Arial, sans-serif;
-    background: #0b1220;
-    color: white;
-    margin: 0;
-    padding: 24px;
-}}
 
-.card {{
-    max-width: 760px;
-    margin: 30px auto;
-    padding: 28px;
-    border-radius: 18px;
-    background: #121c2e;
-}}
+        # ====================================================
+        # FINAL RESPONSE
+        # ====================================================
 
-.ok {{
-    color: #35d07f;
-}}
+        return jsonify({
 
-a {{
-    color: #63a4ff;
-}}
+            "success": True,
 
-</style>
+            "paper_only": True,
 
-</head>
+            "real_orders": False,
 
-<body>
+            "analysis": analysis,
 
-<div class="card">
+            "market": analysis["market"],
 
-<h1>TradeMind</h1>
+            "price": analysis["price"],
 
-<p class="ok">
-● Paper Trading System Online
-</p>
+            "signal": analysis["signal"],
 
-<p>
-Selected market:
-<strong>{selected_market}</strong>
-</p>
+            "score": analysis["score"],
 
-<p>
-Current price:
-<strong>{price}</strong>
-</p>
+            "confidence": analysis["confidence"],
 
-<p>
-Paper cash:
-<strong>
-${portfolio["cash"]:.2f}
-</strong>
-</p>
+            "market_strength": analysis["market_strength"],
 
-<p>
-Portfolio value:
-<strong>
-${portfolio["total_value"]:.2f}
-</strong>
-</p>
+            "risk_level": analysis["risk_level"],
 
-<p>
-Real-money trading is disabled.
-</p>
+            "reasons": analysis["reasons"],
 
-<p>
-<a href="/health">
-System health
-</a>
+            "message": analysis["message"],
 
-·
+            "trade": trade,
 
-<a href="/api/analysis?market={selected_market}">
-AI analysis
-</a>
+            "trade_action": trade.get(
+                "action",
+                "NONE"
+            ),
 
-</p>
+            "trade_executed": trade.get(
+                "executed",
+                False
+            ),
 
-</div>
+            "trade_message": trade.get(
+                "message",
+                ""
+            ),
 
-</body>
+            "position": position,
 
-</html>
-""", 200
+            "portfolio": portfolio
+        })
+
+
+    except Exception as exc:
+
+        return jsonify({
+
+            "success": False,
+
+            "error": str(exc),
+
+            "paper_only": True,
+
+            "real_orders": False
+        }), 500
+
+
+# ============================================================
+# PRICE
+# ============================================================
+
+@app.route("/api/price")
+def api_price():
+
+    market = request.args.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+
+        return jsonify({
+            "error": "Unsupported market."
+        }), 400
+
+
+    try:
+
+        price = get_market_price(
+            market
+        )
+
+        return jsonify({
+
+            "success": True,
+
+            "market": market,
+
+            "price": price,
+
+            "paper_only": True
+        })
+
+
+    except Exception as exc:
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ============================================================
+# ANALYSIS ONLY
+# ============================================================
+
+@app.route("/api/analysis")
+def api_analysis():
+
+    market = request.args.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+
+        return jsonify({
+            "error": "Unsupported market."
+        }), 400
+
+
+    try:
+
+        result = analyze_market(
+            market
+        )
+
+        return jsonify(result)
+
+
+    except Exception as exc:
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ============================================================
+# PORTFOLIO API
+# ============================================================
+
+@app.route("/api/portfolio")
+def api_portfolio():
+
+    try:
+
+        return jsonify(
+            get_portfolio()
+        )
+
+    except Exception as exc:
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ============================================================
+# TRADES API
+# ============================================================
+
+@app.route("/api/trades")
+def api_trades():
+
+    try:
+
+        return jsonify(
+            get_trades()
+        )
+
+    except Exception as exc:
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ============================================================
+# MARKETS API
+# ============================================================
+
+@app.route("/api/markets")
+def api_markets():
+
+    return jsonify(
+        MARKETS
+    )
+
+
+# ============================================================
+# BACKTEST
+# ============================================================
+
+@app.route(
+    "/api/backtest",
+    methods=["POST"]
+)
+def api_backtest():
+
+    data = (
+        request.get_json(
+            silent=True
+        )
+        or {}
+    )
+
+    market = data.get(
+        "market",
+        "BTC/USD"
+    )
+
+    if market not in MARKETS:
+
+        return jsonify({
+            "error": "Unsupported market."
+        }), 400
+
+
+    try:
+
+        candles = get_candles(
+
+            market,
+
+            interval=data.get(
+                "interval",
+                "1h"
+            ),
+
+            outputsize=100
+        )
+
+
+        closes = [
+            float(c["close"])
+            for c in candles
+        ]
+
+
+        start_price = closes[0]
+
+        end_price = closes[-1]
+
+
+        change_pct = (
+            (
+                end_price - start_price
+            )
+            / start_price
+        ) * 100
+
+
+        return jsonify({
+
+            "success": True,
+
+            "market": market,
+
+            "start_price": start_price,
+
+            "end_price": end_price,
+
+            "change_percent": change_pct,
+
+            "candles": len(candles),
+
+            "paper_only": True,
+
+            "note": (
+                "This is a basic historical "
+                "market test and is not a "
+                "guarantee of future results."
+            )
+        })
+
+
+    except Exception as exc:
+
+        return jsonify({
+            "error": str(exc)
+        }), 500
+
+
+# ============================================================
+# HEALTH
+# ============================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+
+        "status": "ok",
+
+        "service": "TradeMind",
+
+        "version": "V4",
+
+        "paper_trading": True,
+
+        "real_orders": False,
+
+        "markets": len(MARKETS),
+
+        "trade_amount": TRADE_AMOUNT,
+
+        "starting_balance": STARTING_BALANCE
+    })
 
 
 # ============================================================
@@ -1592,460 +1779,6 @@ def not_found(error):
 
 
 # ============================================================
-# MAIN AI TRADING ENDPOINT
-# ============================================================
-
-@app.route(
-    "/api/run",
-    methods=["POST"]
-)
-def run_bot():
-
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or {}
-    )
-
-
-    market = data.get(
-        "market",
-        "BTC/USD"
-    )
-
-
-    if market not in MARKETS:
-
-        return jsonify({
-
-            "error": (
-                "Unsupported market."
-            )
-
-        }), 400
-
-
-    try:
-
-        # ====================================================
-        # IMPORTANT:
-        # Analyze the market ONLY ONCE.
-        # ====================================================
-
-        analysis = analyze_market(
-            market
-        )
-
-
-        price = analysis["price"]
-
-        signal = analysis["signal"]
-
-
-        # ====================================================
-        # FIRST:
-        # Check protection on an existing position.
-        # ====================================================
-
-        risk_action = apply_risk_rules(
-            market,
-            price,
-            analysis
-        )
-
-
-        if risk_action:
-
-            trade_action = risk_action
-
-        else:
-
-            # =================================================
-            # BUY
-            # =================================================
-
-            if signal == "BUY":
-
-                trade_action = paper_buy(
-
-                    market,
-
-                    price,
-
-                    "BUY"
-                )
-
-
-            # =================================================
-            # SELL
-            # =================================================
-
-            elif signal == "SELL":
-
-                position = get_position(
-                    market
-                )
-
-
-                if position:
-
-                    trade_action = paper_sell(
-
-                        market,
-
-                        price,
-
-                        "SELL"
-                    )
-
-                else:
-
-                    # -----------------------------------------
-                    # IMPORTANT:
-                    # Don't create a fake SELL trade.
-                    # -----------------------------------------
-
-                    trade_action = {
-
-                        "action": "NONE",
-
-                        "message": (
-                            "SELL signal detected, "
-                            "but there is no open "
-                            "paper position to close."
-                        ),
-
-                        "signal_only": True
-                    }
-
-
-            # =================================================
-            # HOLD
-            # =================================================
-
-            else:
-
-                trade_action = {
-
-                    "action": "HOLD",
-
-                    "message": (
-                        "No trade executed. "
-                        "TradeMind is waiting "
-                        "for stronger confirmation."
-                    )
-                }
-
-
-        return jsonify({
-
-            **analysis,
-
-            "trade": trade_action,
-
-            "paper_only": True
-
-        })
-
-
-    except Exception as exc:
-
-        return jsonify({
-
-            "error": str(exc),
-
-            "paper_only": True
-
-        }), 500
-
-
-# ============================================================
-# CURRENT PRICE
-# ============================================================
-
-@app.route("/api/price")
-def api_price():
-
-    market = request.args.get(
-        "market",
-        "BTC/USD"
-    )
-
-
-    if market not in MARKETS:
-
-        return jsonify({
-
-            "error": (
-                "Unsupported market."
-            )
-
-        }), 400
-
-
-    try:
-
-        price = get_market_price(
-            market
-        )
-
-
-        return jsonify({
-
-            "market": market,
-
-            "price": price
-
-        })
-
-
-    except Exception as exc:
-
-        return jsonify({
-
-            "error": str(exc)
-
-        }), 500
-
-
-# ============================================================
-# AI ANALYSIS WITHOUT EXECUTING A TRADE
-# ============================================================
-
-@app.route("/api/analysis")
-def api_analysis():
-
-    market = request.args.get(
-        "market",
-        "BTC/USD"
-    )
-
-
-    if market not in MARKETS:
-
-        return jsonify({
-
-            "error": (
-                "Unsupported market."
-            )
-
-        }), 400
-
-
-    try:
-
-        return jsonify(
-            analyze_market(
-                market
-            )
-        )
-
-
-    except Exception as exc:
-
-        return jsonify({
-
-            "error": str(exc)
-
-        }), 500
-
-
-# ============================================================
-# PORTFOLIO API
-# ============================================================
-
-@app.route("/api/portfolio")
-def api_portfolio():
-
-    try:
-
-        return jsonify(
-            get_portfolio()
-        )
-
-
-    except Exception as exc:
-
-        return jsonify({
-
-            "error": str(exc)
-
-        }), 500
-
-
-# ============================================================
-# TRADE HISTORY API
-# ============================================================
-
-@app.route("/api/trades")
-def api_trades():
-
-    try:
-
-        return jsonify(
-            get_trades()
-        )
-
-    except Exception as exc:
-
-        return jsonify({
-
-            "error": str(exc)
-
-        }), 500
-
-
-# ============================================================
-# MARKETS API
-# ============================================================
-
-@app.route("/api/markets")
-def api_markets():
-
-    return jsonify(
-        MARKETS
-    )
-
-
-# ============================================================
-# BASIC BACKTEST
-# ============================================================
-
-@app.route(
-    "/api/backtest",
-    methods=["POST"]
-)
-def api_backtest():
-
-    data = (
-        request.get_json(
-            silent=True
-        )
-        or {}
-    )
-
-
-    market = data.get(
-        "market",
-        "BTC/USD"
-    )
-
-
-    if market not in MARKETS:
-
-        return jsonify({
-
-            "error": (
-                "Unsupported market."
-            )
-
-        }), 400
-
-
-    try:
-
-        candles = get_candles(
-
-            market,
-
-            interval=data.get(
-                "interval",
-                "1h"
-            ),
-
-            outputsize=100
-
-        )
-
-
-        closes = [
-
-            float(c["close"])
-
-            for c in candles
-
-        ]
-
-
-        start_price = closes[0]
-
-        end_price = closes[-1]
-
-
-        change_pct = (
-
-            (
-                end_price
-                - start_price
-            )
-
-            / start_price
-
-        ) * 100
-
-
-        return jsonify({
-
-            "market": market,
-
-            "start_price": (
-                start_price
-            ),
-
-            "end_price": (
-                end_price
-            ),
-
-            "change_percent": (
-                change_pct
-            ),
-
-            "candles": len(candles),
-
-            "note": (
-                "This is a basic historical "
-                "market test, not a guarantee "
-                "of future results."
-            )
-
-        })
-
-
-    except Exception as exc:
-
-        return jsonify({
-
-            "error": str(exc)
-
-        }), 500
-
-
-# ============================================================
-# HEALTH CHECK
-# ============================================================
-
-@app.route("/health")
-def health():
-
-    return jsonify({
-
-        "status": "ok",
-
-        "service": "TradeMind",
-
-        "version": "V3",
-
-        "paper_trading": True,
-
-        "real_orders": False,
-
-        "markets": len(MARKETS)
-
-    })
-
-
-# ============================================================
 # STARTUP
 # ============================================================
 
@@ -2066,5 +1799,4 @@ if __name__ == "__main__":
         ),
 
         debug=False
-
 )
