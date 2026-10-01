@@ -127,12 +127,24 @@ async function loadMarkets(){
   const data=await api('/api/markets');
   const select=$('marketSelect');
   select.innerHTML='';
-  (data.markets||[]).forEach(m=>{
+  const markets = data.markets || {};
+  const list = Array.isArray(markets)
+    ? markets
+    : Object.values(markets);
+
+  select.innerHTML='';
+  list.forEach(m=>{
+    const symbol = m.symbol || m;
+    const name = m.name || symbol;
     const o=document.createElement('option');
-    o.value=m.symbol;
-    o.textContent=m.name+' — '+m.symbol;
+    o.value=symbol;
+    o.textContent=name+' — '+symbol;
     select.appendChild(o);
   });
+
+  if (!list.length) {
+    throw new Error('No markets were returned by the server.');
+  }
 }
 
 async function loadPortfolio(){
@@ -200,4 +212,4 @@ async function refresh(){
 refresh();
 </script>
 </body>
-  </html>
+   </html>
