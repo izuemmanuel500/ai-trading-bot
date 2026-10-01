@@ -101,7 +101,7 @@ footer{text-align:center;color:#71859a;padding:25px 0;font-size:12px}
   <h2>Trade History</h2>
   <div style="overflow-x:auto">
   <table>
-    <thead><tr><th>Time</th><th>Market</th><th>Action</th><th>Price</th><th>Amount</th><th>Reason</th></tr></thead>
+    <thead><tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Value</th><th>Signal</th></tr></thead>
     <tbody id="historyTable"><tr><td colspan="6">No trades yet.</td></tr></tbody>
   </table>
   </div>
@@ -157,7 +157,7 @@ async function loadPortfolio(){
 
     const rows=d.positions||[];
     $('positionsTable').innerHTML=rows.length?rows.map(p=>`
-      <tr><td>${p.market}</td><td>${num(p.entry_price)}</td><td>${num(p.current_price)}</td><td>${num(p.quantity)}</td><td>${money(p.unrealized_pnl)}</td></tr>
+      <tr><td>${p.market}</td><td>${num(p.avg_price)}</td><td>${num(p.current_price)}</td><td>${num(p.quantity)}</td><td>${money(p.unrealized_pnl)}</td></tr>
     `).join(''):'<tr><td colspan="5">No open positions.</td></tr>';
   }catch(e){$('status').textContent='Portfolio error: '+e.message}
 }
@@ -167,7 +167,7 @@ async function loadTrades(){
     const d=await api('/api/trades');
     const rows=d.trades||[];
     $('historyTable').innerHTML=rows.length?rows.map(t=>`
-      <tr><td>${t.timestamp||''}</td><td>${t.market||''}</td><td>${t.action||''}</td><td>${num(t.price)}</td><td>${money(t.amount)}</td><td>${t.reason||''}</td></tr>
+      <tr><td>${t.created_at||''}</td><td>${t.market||''}</td><td>${t.side||''}</td><td>${num(t.price)}</td><td>${money(t.value)}</td><td>${t.signal||''}</td></tr>
     `).join(''):'<tr><td colspan="6">No trades yet.</td></tr>';
   }catch(e){}
 }
@@ -212,4 +212,4 @@ async function refresh(){
 refresh();
 </script>
 </body>
-   </html>
+ </html>
