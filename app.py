@@ -128,6 +128,21 @@ def initialize_database():
         )
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS analysis_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            market TEXT NOT NULL,
+            signal TEXT NOT NULL,
+            price REAL,
+            confidence REAL,
+            risk TEXT,
+            execution_status TEXT NOT NULL,
+            message TEXT,
+            data_interval TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
     account = conn.execute(
         "SELECT id FROM account WHERE id = 1"
     ).fetchone()
@@ -251,6 +266,108 @@ def insert_trade(
 
     conn.commit()
     conn.close()
+
+
+def insert_analysis_history(
+    market,
+    signal,
+    price=None,
+    confidence=None,
+    risk="",
+    execution_status="ANALYZED",
+    message="",
+    data_interval="",
+):
+    conn = db()
+
+    conn.execute(
+        """
+        INSERT INTO analysis_history (
+            market,
+            signal,
+            price,
+            confidence,
+            risk,
+            execution_status,
+            message,
+            data_interval,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            market,
+            signal,
+            price,
+            confidence,
+            risk,
+            execution_status,
+            message,
+            data_interval,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_analysis_history(limit=100):
+    conn = db()
+
+    rows = conn.execute(
+        """
+        SELECT
+            id,
+            market,
+            signal,
+            price,
+            confidence,
+            risk,
+            execution_status,
+            message,
+            data_interval,
+            created_at
+        FROM analysis_history
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (int(limit),),
+    ).fetchall()
+
+    conn.close()
+
+    return [dict(row) for row in rows]
+
+
+# ============================================================
+# PAPER ACCOUNT RESET
+# ============================================================
+
+def reset_paper_account():
+    conn = db()
+
+    conn.execute("DELETE FROM positions")
+    conn.execute("DELETE FROM trades")
+    conn.execute("DELETE FROM analysis_history")
+    conn.execute(
+        "UPDATE account SET balance = ? WHERE id = 1",
+        (STARTING_BALANCE,),
+    )
+
+    conn.commit()
+    conn.close()
+
+    LAST_TRADE_EXECUTION.clear()
+
+    return {
+        "success": True,
+        "balance": STARTING_BALANCE,
+        "positions_cleared": True,
+        "trades_cleared": True,
+        "analysis_history_cleared": True,
+        "message": "Paper account reset to $1,000.00.",
+    }
 
 
 # ============================================================
@@ -487,9 +604,10 @@ def get_candles(
 
             except RuntimeError as second_error:
                 raise RuntimeError(
-                    f"{market} data unavailable. "
-                    f"1h: {first_error} | "
-                    f"daily fallback: {second_error}"
+                    f"{market} is not currently available from the "
+                    f"Twelve Data time-series endpoint for this API "
+                    f"key/plan. 1h: {first_error} | "
+                    f"daily: {second_error}"
                 ) from second_error
 
         raise first_error
@@ -1060,6 +1178,32 @@ def api_run():
             analysis,
         )
 
+        execution_status = "NO_TRADE"
+
+        if trade.get("executed"):
+            execution_status = "PAPER_TRADE_EXECUTED"
+        elif trade.get("reason") == "HOLD":
+            execution_status = "HOLD"
+        elif trade.get("reason") == "COOLDOWN":
+            execution_status = "COOLDOWN"
+        elif trade.get("reason") == "POSITION_ALREADY_OPEN":
+            execution_status = "POSITION_ALREADY_OPEN"
+        elif trade.get("signal_only"):
+            execution_status = "SIGNAL_ONLY"
+        elif trade.get("reason"):
+            execution_status = str(trade.get("reason"))
+
+        insert_analysis_history(
+            market=market,
+            signal=analysis.get("signal", "UNKNOWN"),
+            price=analysis.get("price"),
+            confidence=analysis.get("confidence"),
+            risk=analysis.get("risk", ""),
+            execution_status=execution_status,
+            message=trade.get("message", ""),
+            data_interval=analysis.get("data_interval", ""),
+        )
+
         return jsonify({
             "success": True,
             "paper_only": True,
@@ -1071,12 +1215,25 @@ def api_run():
         })
 
     except Exception as exc:
+        error_message = str(exc)
+
+        insert_analysis_history(
+            market=market,
+            signal="ERROR",
+            price=None,
+            confidence=None,
+            risk="",
+            execution_status="DATA_ERROR",
+            message=error_message,
+            data_interval="",
+        )
+
         return jsonify({
             "success": False,
             "paper_only": True,
             "real_orders_disabled": True,
             "market": market,
-            "error": str(exc),
+            "error": error_message,
             "error_type": type(exc).__name__,
         }), 502
 
@@ -1192,6 +1349,83 @@ def api_trades():
         }), 500
 
 
+@app.route("/api/analysis-history")
+def api_analysis_history():
+    try:
+        limit = int(
+            request.args.get(
+                "limit",
+                100,
+            )
+        )
+
+        limit = max(1, min(limit, 500))
+
+        return jsonify({
+            "success": True,
+            "analysis_history": get_analysis_history(limit),
+        })
+
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+        }), 500
+
+
+@app.route("/api/reset-paper", methods=["POST"])
+def api_reset_paper():
+    try:
+        return jsonify(reset_paper_account())
+
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "error": str(exc),
+        }), 500
+
+
+@app.route("/api/market-status")
+def api_market_status():
+    results = []
+
+    for market, info in MARKETS.items():
+        try:
+            candles, interval = get_candles(
+                market,
+                interval="1h",
+                outputsize=5,
+            )
+
+            results.append({
+                "market": market,
+                "name": info["name"],
+                "asset_type": info["asset_type"],
+                "available": True,
+                "data_interval": interval,
+                "price": float(candles[-1]["close"]) if candles else None,
+                "error": None,
+            })
+
+        except Exception as exc:
+            results.append({
+                "market": market,
+                "name": info["name"],
+                "asset_type": info["asset_type"],
+                "available": False,
+                "data_interval": None,
+                "price": None,
+                "error": str(exc),
+            })
+
+    return jsonify({
+        "success": True,
+        "markets": results,
+        "paper_only": True,
+        "real_orders_disabled": True,
+    })
+
+
 @app.route("/api/markets")
 def api_markets():
     return jsonify({
@@ -1204,7 +1438,7 @@ def api_markets():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "TradeMind V5.1",
+        "version": "TradeMind V5.2",
         "paper_only": True,
         "real_orders_disabled": True,
         "markets": list(MARKETS.keys()),
@@ -1239,8 +1473,11 @@ def server_error(error):
 
 initialize_database()
 
+if os.getenv("TRADEMIND_RESET_PAPER_ACCOUNT", "").strip().lower() == "true":
+    reset_paper_account()
+
 print("=" * 60)
-print("TradeMind V5.1 started")
+print("TradeMind V5.2 started")
 print("PAPER TRADING ONLY")
 print("REAL ORDERS DISABLED")
 print("Markets:", ", ".join(MARKETS.keys()))
@@ -1258,4 +1495,4 @@ if __name__ == "__main__":
         ),
         debug=False,
 )
-    
+            
