@@ -32,7 +32,7 @@ h2,h3{margin:7px 0 16px}.analysis-card{padding:18px;border-radius:16px;backgroun
 
 <section class="market-card">
 <div class="market-summary"><strong id="marketName">Bitcoin — BTC/USD</strong><span id="heroPrice">—</span></div>
-<label for="marketSelect">Choose market</label><select id="marketSelect"></select>
+<label for="marketSelect">Choose market</label><select id="marketSelect" onchange="changeMarket()"></select>
 <div class="toolbar"><button id="runBotButton" class="run-button" onclick="runBot()">🤖 Run AI Trader</button><button id="resetButton" class="reset-button" onclick="resetPaperAccount()">Reset Paper Account</button></div>
 </section>
 
@@ -75,7 +75,53 @@ async function loadMarkets(){
 }
 function updateLabels(){const info=markets[currentMarket];$("marketName").textContent=info?`${info.name} — ${currentMarket}`:currentMarket;$("marketLabel").textContent=currentMarket}
 function renderMarketButtons(){const box=$("marketButtons");box.innerHTML="";Object.values(markets).forEach(info=>{const b=document.createElement("button");b.type="button";b.innerHTML=`${esc(info.name)}<strong>${esc(info.symbol)}</strong>`;b.onclick=()=>selectMarket(info.symbol);box.appendChild(b)})}
-function selectMarket(m){currentMarket=m;$("marketSelect").value=m;updateLabels();clearAnalysis();loadPortfolio()}
+async function selectMarket(m){
+ currentMarket=m;
+ $("marketSelect").value=m;
+ updateLabels();
+
+ $("heroPrice").textContent="Loading...";
+ $("marketPriceValue").textContent="Loading...";
+
+ clearAnalysis();
+
+ try{
+   const r=await fetch("/api/price?market="+encodeURIComponent(currentMarket),{cache:"no-store"});
+   const d=await r.json();
+
+   if(!r.ok||!d.success)throw new Error(d.error||"Could not load market price.");
+
+   const price=Number(d.price);
+
+   if(Number.isFinite(price)){
+     $("heroPrice").textContent=num(price);
+     $("marketPriceValue").textContent=num(price);
+   }else{
+     throw new Error("Market price is unavailable.");
+   }
+
+   $("analysisResult").innerHTML=
+     `<div class="analysis-status">MARKET SELECTED</div>
+      <p><strong>${esc(currentMarket)}</strong> is ready.</p>
+      <p class="analysis-note">
+        Current market price: <strong>${num(price)}</strong>.
+        Press <strong>Run AI Trader</strong> to analyze this market and execute a paper trade if the signal qualifies.
+      </p>`;
+ }catch(e){
+   $("heroPrice").textContent="—";
+   $("marketPriceValue").textContent="—";
+
+   $("analysisResult").innerHTML=
+     `<div class="analysis-status">READY</div>
+      <p>Selected market: <strong>${esc(currentMarket)}</strong></p>
+      <p class="analysis-note">
+        ${esc(e.message||"Market price is temporarily unavailable.")}
+        Press <strong>Run AI Trader</strong> to try the full analysis.
+      </p>`;
+ }
+
+ await loadPortfolio();
+}
 function changeMarket(){selectMarket($("marketSelect").value)}
 function clearAnalysis(){$("heroPrice").textContent="—";$("marketPriceValue").textContent="—";$("analysisResult").innerHTML=`<div class="analysis-status">READY</div><p>Selected market: <strong>${esc(currentMarket)}</strong></p><p class="analysis-note">Press <strong>Run AI Trader</strong> to analyze this market. Previous market data has been cleared.</p>`}
 function renderAnalysis(a,t){const s=a.signal||"HOLD";$("analysisResult").innerHTML=`<div class="analysis-status">LIVE ANALYSIS • ${esc(a.data_interval||"DATA")}</div><div class="analysis-grid"><div class="metric"><span>Signal</span><strong class="${sigClass(s)}">${esc(s)}</strong></div><div class="metric"><span>Confidence</span><strong>${num(a.confidence,0)}%</strong></div><div class="metric"><span>Trend</span><strong>${esc(a.trend||a.strength||"—")}</strong></div><div class="metric"><span>Risk</span><strong>${esc(a.risk||"—")}</strong></div><div class="metric"><span>Stop Loss</span><strong>${num(a.stop_loss)}</strong></div><div class="metric"><span>Take Profit</span><strong>${num(a.take_profit)}</strong></div><div class="metric"><span>EMA20</span><strong>${num(a.ema20)}</strong></div><div class="metric"><span>RSI14</span><strong>${num(a.rsi14,2)}</strong></div></div><p><strong>AI explanation:</strong> ${esc(a.explanation||"")}</p><ul class="reason-list">${(a.reasons||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul><p class="analysis-note"><strong>Execution:</strong> ${esc(t?.message||(t?.executed?"Paper order executed.":t?.reason||"Analysis completed."))}</p>`}
@@ -112,5 +158,5 @@ async function boot(){try{await loadMarkets();await Promise.all([loadPortfolio()
 boot();
 </script>
 </body>
-                                                                                         </html>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+ </html>
+ 
