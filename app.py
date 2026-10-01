@@ -1144,5 +1144,468 @@ def apply_risk_rules(
             price,
             "STOP LOSS"
         )
+                return {
+            "triggered": True,
+            "reason": "STOP LOSS",
+            "result": result
+        }
 
-       
+    # ========================================================
+    # TAKE PROFIT
+    # ========================================================
+
+    if price >= take_profit:
+
+        result = paper_sell(
+            market,
+            price,
+            "TAKE PROFIT"
+        )
+
+        return {
+            "triggered": True,
+            "reason": "TAKE PROFIT",
+            "result": result
+        }
+
+    return {
+        "triggered": False,
+        "reason": None,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit
+    }
+
+
+# ============================================================
+# TRADE EXECUTION PROTECTION
+# ============================================================
+
+def check_trade_protection(market):
+
+    now = time.time()
+
+    last_execution = LAST_TRADE_EXECUTION.get(market)
+
+    if last_execution is None:
+        return None
+
+    elapsed = now - last_execution
+
+    if elapsed < TRADE_COOLDOWN_SECONDS:
+
+        remaining = round(
+            TRADE_COOLDOWN_SECONDS - elapsed,
+            1
+        )
+
+        return {
+            "protected": True,
+            "message": (
+                f"Trade protection active for {market}. "
+                f"Please wait {remaining} seconds."
+            )
+        }
+
+    return None
+
+
+# ============================================================
+# EXECUTE TRADE DECISION
+# ============================================================
+
+def execute_trade_decision(
+    market,
+    analysis
+):
+
+    with TRADE_EXECUTION_LOCK:
+
+        protection = check_trade_protection(market)
+
+        if protection:
+
+            return {
+                "action": "NONE",
+                "executed": False,
+                "cooldown": True,
+                "message": protection["message"]
+            }
+
+        price = float(
+            analysis["price"]
+        )
+
+        # ----------------------------------------------------
+        # RISK MANAGEMENT FIRST
+        # ----------------------------------------------------
+
+        risk_result = apply_risk_rules(
+            market,
+            price,
+            analysis
+        )
+
+        if risk_result and risk_result.get("triggered"):
+
+            LAST_TRADE_EXECUTION[market] = time.time()
+
+            return {
+                "action": risk_result["reason"],
+                "executed": risk_result["result"].get(
+                    "executed",
+                    False
+                ),
+                "trade": risk_result["result"],
+                "message": risk_result["result"].get(
+                    "message",
+                    risk_result["reason"]
+                )
+            }
+
+        # ----------------------------------------------------
+        # BUY
+        # ----------------------------------------------------
+
+        if analysis["signal"] == "BUY":
+
+            result = paper_buy(
+                market,
+                price,
+                "BUY"
+            )
+
+            if result.get("executed"):
+
+                LAST_TRADE_EXECUTION[market] = time.time()
+
+            return result
+
+        # ----------------------------------------------------
+        # SELL
+        # ----------------------------------------------------
+
+        if analysis["signal"] == "SELL":
+
+            result = paper_sell(
+                market,
+                price,
+                "SELL"
+            )
+
+            if result.get("executed"):
+
+                LAST_TRADE_EXECUTION[market] = time.time()
+
+            return result
+
+        # ----------------------------------------------------
+        # HOLD
+        # ----------------------------------------------------
+
+        return {
+            "action": "HOLD",
+            "executed": False,
+            "message": (
+                "TradeMind is holding. "
+                "No paper trade was executed."
+            )
+        }
+
+
+# ============================================================
+# PORTFOLIO
+# ============================================================
+
+def get_portfolio():
+
+    balance = get_balance()
+
+    positions = get_all_positions()
+
+    total_position_value = 0.0
+
+    detailed_positions = []
+
+    for position in positions:
+
+        market = position["market"]
+        quantity = float(position["quantity"])
+        avg_price = float(position["avg_price"])
+
+        try:
+            current_price = get_market_price(market)
+        except Exception:
+            current_price = avg_price
+
+        value = quantity * current_price
+
+        pnl = (
+            current_price - avg_price
+        ) * quantity
+
+        total_position_value += value
+
+        detailed_positions.append({
+            "market": market,
+            "quantity": quantity,
+            "avg_price": avg_price,
+            "current_price": current_price,
+            "value": value,
+            "pnl": pnl
+        })
+
+    portfolio_value = (
+        balance + total_position_value
+    )
+
+    return {
+        "cash": balance,
+        "balance": balance,
+        "position_value": total_position_value,
+        "portfolio_value": portfolio_value,
+        "positions": detailed_positions,
+        "paper_only": True
+    }
+
+
+# ============================================================
+# HOME PAGE
+# ============================================================
+
+@app.route("/")
+def dashboard():
+
+    return render_template(
+        "index.html"
+    )
+
+
+# ============================================================
+# RUN AI TRADER
+# ============================================================
+
+@app.route("/api/run", methods=["POST"])
+def run_bot():
+
+    try:
+
+        data = request.get_json(
+            silent=True
+        ) or {}
+
+        market = data.get(
+            "market",
+            "BTC/USD"
+        )
+
+        if market not in MARKETS:
+
+            return jsonify({
+                "error": "Unsupported market."
+            }), 400
+
+        analysis = analyze_market(
+            market
+        )
+
+        trade = execute_trade_decision(
+            market,
+            analysis
+        )
+
+        return jsonify({
+            "success": True,
+            "analysis": analysis,
+            "trade": trade,
+            "paper_only": True
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "paper_only": True
+        }), 500
+
+
+# ============================================================
+# CURRENT PRICE
+# ============================================================
+
+@app.route("/api/price", methods=["GET"])
+def api_price():
+
+    try:
+
+        market = request.args.get(
+            "market",
+            "BTC/USD"
+        )
+
+        if market not in MARKETS:
+
+            return jsonify({
+                "error": "Unsupported market."
+            }), 400
+
+        price = get_market_price(
+            market
+        )
+
+        return jsonify({
+            "market": market,
+            "price": price,
+            "paper_only": True
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# ============================================================
+# MARKET ANALYSIS
+# ============================================================
+
+@app.route("/api/analysis", methods=["GET"])
+def api_analysis():
+
+    try:
+
+        market = request.args.get(
+            "market",
+            "BTC/USD"
+        )
+
+        if market not in MARKETS:
+
+            return jsonify({
+                "error": "Unsupported market."
+            }), 400
+
+        analysis = analyze_market(
+            market
+        )
+
+        return jsonify(
+            analysis
+        )
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# ============================================================
+# PORTFOLIO API
+# ============================================================
+
+@app.route("/api/portfolio", methods=["GET"])
+def api_portfolio():
+
+    try:
+
+        return jsonify(
+            get_portfolio()
+        )
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# ============================================================
+# TRADE HISTORY API
+# ============================================================
+
+@app.route("/api/trades", methods=["GET"])
+def api_trades():
+
+    try:
+
+        return jsonify({
+            "trades": get_trades(50),
+            "paper_only": True
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
+# ============================================================
+# MARKETS API
+# ============================================================
+
+@app.route("/api/markets", methods=["GET"])
+def api_markets():
+
+    return jsonify({
+        "markets": MARKETS,
+        "paper_only": True
+    })
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
+@app.route("/health", methods=["GET"])
+def health():
+
+    return jsonify({
+        "status": "ok",
+        "version": "V4.1",
+        "paper_only": True,
+        "real_orders": False,
+        "one_position_per_market": True,
+        "duplicate_protection": True
+    })
+
+
+# ============================================================
+# 404 HANDLER
+# ============================================================
+
+@app.errorhandler(404)
+def not_found(error):
+
+    return jsonify({
+        "error": "Route not found",
+        "status": 404
+    }), 404
+
+
+# ============================================================
+# INITIALIZE DATABASE
+# ============================================================
+
+initialize_database()
+
+
+# ============================================================
+# START SERVER
+# ============================================================
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=int(
+            os.getenv(
+                "PORT",
+                5000
+            )
+        ),
+        debug=False
+    )
+    
