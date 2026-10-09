@@ -1,162 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TradeMind AI Paper Trading</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeMind V7 — Autonomous Paper Trading</title>
 <style>
-:root{--bg:#07111f;--panel:#0d1b2a;--panel2:#102235;--border:rgba(255,255,255,.09);--text:#eef5ff;--muted:#91a4ba;--accent:#58a6ff;--good:#32d583;--bad:#ff6b6b;--warn:#ffbf69}
-*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(180deg,#07111f,#091522);color:var(--text)}
-button,select{font:inherit}.topbar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 5%;background:rgba(7,17,31,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
-.brand{display:flex;align-items:center;gap:12px}.brand-logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-weight:900;background:linear-gradient(135deg,#58a6ff,#7c5cff)}
-.brand h2{margin:0;font-size:20px}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}.paper-status{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--good)}.status-dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 12px rgba(50,213,131,.7)}
-.container{width:min(1100px,92%);margin:0 auto;padding:42px 0 70px}.hero{margin-bottom:28px}.eyebrow{color:var(--accent);font-size:11px;font-weight:900;letter-spacing:.14em}.hero h1{font-size:clamp(36px,8vw,70px);line-height:.98;margin:10px 0 18px}.hero p,.muted{color:var(--muted);line-height:1.7}
-.market-card,.section,.panel,.warning-card{background:rgba(13,27,42,.88);border:1px solid var(--border);border-radius:22px;padding:22px;margin-top:18px}.market-summary{display:flex;justify-content:space-between;gap:16px;margin-bottom:18px}.market-summary strong{font-size:18px}.market-summary span{color:var(--accent);font-weight:800}
-label{display:block;color:var(--muted);font-size:13px;margin-bottom:8px}select{width:100%;padding:14px 15px;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:12px;outline:none}
-.toolbar{display:flex;gap:10px}.run-button,.reset-button{flex:1;margin-top:12px;padding:14px 16px;border:0;border-radius:12px;color:white;font-weight:900;cursor:pointer}.run-button{background:linear-gradient(135deg,#2376d8,#6548d7)}.reset-button{background:#5b2630;border:1px solid rgba(255,255,255,.1)}button:disabled{opacity:.6;cursor:wait}
-.stats-grid,.performance-grid,.risk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}.stat-card,.performance-card,.risk-grid>div{background:rgba(16,34,53,.9);border:1px solid var(--border);border-radius:16px;padding:18px}.stat-card span,.performance-card span,.risk-grid span{display:block;color:var(--muted);font-size:12px}.stat-card strong,.performance-card strong,.risk-grid strong{display:block;margin:8px 0 4px;font-size:20px}.stat-card small{color:var(--muted)}
-h2,h3{margin:7px 0 16px}.analysis-card{padding:18px;border-radius:16px;background:var(--panel2);border:1px solid var(--border)}.analysis-status{font-size:11px;font-weight:900;color:var(--accent);margin-bottom:14px}.analysis-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:15px 0}.metric{padding:13px;border-radius:12px;background:rgba(255,255,255,.035)}.metric span{display:block;color:var(--muted);font-size:11px}.metric strong{display:block;margin-top:5px}.analysis-note{color:var(--muted);line-height:1.6}.reason-list{padding-left:20px;color:var(--muted);line-height:1.8}
-.market-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.market-buttons button{text-align:left;padding:14px;border-radius:13px;color:var(--text);background:var(--panel2);border:1px solid var(--border);cursor:pointer}.market-buttons strong{display:block;margin-top:4px;color:var(--accent);font-size:12px}
-.position-card{display:grid;grid-template-columns:1.1fr 1.2fr 1fr;gap:12px;padding:15px;border:1px solid var(--border);background:var(--panel2);border-radius:14px;margin-top:10px}.position-card span{display:block;color:var(--muted);font-size:12px;margin-top:5px}
-.panel-header{display:flex;justify-content:space-between;gap:12px;align-items:center}.live-label{font-size:10px;font-weight:900;color:var(--good)}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:720px}th,td{text-align:left;padding:12px 9px;border-bottom:1px solid var(--border);font-size:12px}th{color:var(--muted);font-weight:700}td{color:#dfeaff}
-.empty-state{padding:25px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:14px}.warning-card{border-color:rgba(255,191,105,.25)}.warning-card strong{color:var(--warn)}.warning-card p{color:var(--muted);margin-bottom:0}.good{color:var(--good)!important}.bad{color:var(--bad)!important}.warn{color:var(--warn)!important}
-@media(max-width:800px){.stats-grid,.performance-grid,.risk-grid{grid-template-columns:repeat(2,1fr)}.analysis-grid{grid-template-columns:repeat(2,1fr)}.market-buttons{grid-template-columns:repeat(2,1fr)}.position-card{grid-template-columns:1fr}}
-@media(max-width:520px){.container{width:94%;padding-top:28px}.topbar{padding:13px 3%}.hero h1{font-size:42px}.stats-grid,.performance-grid,.risk-grid,.analysis-grid,.market-buttons{grid-template-columns:1fr}.market-summary{flex-direction:column}.toolbar{flex-direction:column}}
-</style>
-</head>
-<body>
-<header class="topbar"><div class="brand"><div class="brand-logo">TM</div><div><h2>TradeMind</h2><p>AI Paper Trading</p></div></div><div class="paper-status"><span class="status-dot"></span>PAPER MODE • REAL ORDERS OFF</div></header>
-
+:root{--bg:#07111f;--panel:#0d1b2a;--panel2:#102235;--border:rgba(255,255,255,.09);--text:#eef5ff;--muted:#91a4ba;--accent:#58a6ff;--good:#32d583;--bad:#ff6b6b;--warn:#ffbf69}*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:linear-gradient(180deg,#07111f,#091522);color:var(--text)}button,select{font:inherit}.topbar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 4%;background:rgba(7,17,31,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}.brand{display:flex;align-items:center;gap:12px}.brand-logo{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-weight:900;background:linear-gradient(135deg,#58a6ff,#7c5cff)}.brand h2{margin:0;font-size:20px}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}.badge{font-size:11px;font-weight:900;color:var(--good);border:1px solid rgba(50,213,131,.3);border-radius:99px;padding:9px 12px}.container{width:min(1180px,94%);margin:auto;padding:30px 0 60px}.hero{padding:24px;border:1px solid var(--border);border-radius:22px;background:linear-gradient(135deg,#102b45,#0d1b2a);margin-bottom:18px}.eyebrow{color:var(--accent);font-size:11px;font-weight:900;letter-spacing:.14em}.hero h1{font-size:clamp(32px,6vw,54px);line-height:1.02;margin:9px 0 12px}.muted,.hero p{color:var(--muted);line-height:1.65}.panel,.stat,.metric{background:rgba(13,27,42,.9);border:1px solid var(--border);border-radius:17px;padding:18px;margin-top:16px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat{margin:0;background:var(--panel2)}.stat span,.metric span{display:block;color:var(--muted);font-size:12px}.stat strong{display:block;font-size:clamp(18px,2.4vw,25px);margin:9px 0 4px;overflow-wrap:anywhere}.stat small{color:var(--muted)}.toolbar{display:flex;gap:10px;flex-wrap:wrap}.toolbar select{flex:1;min-width:210px}.toolbar button,.toolbar select{border-radius:12px;padding:13px 15px;border:1px solid var(--border)}select{background:var(--panel2);color:var(--text)}button{cursor:pointer;font-weight:800;color:#fff;background:linear-gradient(135deg,#2376d8,#6548d7)}button.secondary{background:#213449}button.danger{background:#5b2630}button:disabled{opacity:.55;cursor:wait}.statusline{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.6}.grid2{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{margin:0;background:var(--panel2);padding:13px}.metric strong{display:block;margin-top:7px;overflow-wrap:anywhere}.chart-wrap{height:440px;overflow:hidden;border-radius:13px;background:#0b1624}.chart-wrap iframe{width:100%;height:100%;border:0}.market-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.market-tile{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0}.market-tile strong{display:block;color:var(--accent);font-size:13px}.market-tile span{display:block;font-size:12px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--border);font-size:12px}th{color:var(--muted)}.good{color:var(--good)!important}.bad{color:var(--bad)!important}.warn{color:var(--warn)!important}.pill{display:inline-block;padding:5px 8px;border-radius:99px;background:rgba(255,255,255,.06);font-size:11px}.warning{border-color:rgba(255,191,105,.3)}.warning strong{color:var(--warn)}.warning p{color:var(--muted);line-height:1.6;margin-bottom:0}.tiny{font-size:11px;color:var(--muted)}@media(max-width:850px){.stats{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}.market-grid{grid-template-columns:repeat(3,1fr)}.metric-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:520px){.topbar{padding:11px 3%;align-items:flex-start}.badge{max-width:150px;text-align:center;line-height:1.4}.container{width:94%;padding-top:18px}.hero{padding:18px}.stats{gap:8px}.stat{padding:13px}.toolbar{flex-direction:column}.toolbar select,.toolbar button{width:100%}.market-grid{grid-template-columns:repeat(2,1fr)}.chart-wrap{height:360px}.panel{padding:13px}}
+</style></head><body>
+<header class="topbar"><div class="brand"><div class="brand-logo">TM</div><div><h2>TradeMind V7</h2><p>Autonomous AI Paper Trading</p></div></div><div class="badge">PAPER MODE • REAL ORDERS OFF</div></header>
 <main class="container">
-<section class="hero"><div class="eyebrow">AI MARKET ANALYSIS</div><h1>Trade smarter.<br>Test safely.</h1><p>Analyze multiple markets with TradeMind's paper-trading engine. No real money is used.</p></section>
-
-<section class="market-card">
-<div class="market-summary"><strong id="marketName">Bitcoin — BTC/USD</strong><span id="heroPrice">—</span></div>
-<label for="marketSelect">Choose market</label><select id="marketSelect" onchange="changeMarket()"></select>
-<div class="toolbar"><button id="runBotButton" class="run-button" onclick="runBot()">🤖 Run AI Trader</button><button id="resetButton" class="reset-button" onclick="resetPaperAccount()">Reset Paper Account</button></div>
-</section>
-
-<section class="stats-grid">
-<div class="stat-card"><span>Market Price</span><strong id="marketPriceValue">—</strong><small id="marketLabel">BTC/USD</small></div>
-<div class="stat-card"><span>Paper Cash</span><strong id="cashValue">$1,000.00</strong><small>Available balance</small></div>
-<div class="stat-card"><span>Portfolio Value</span><strong id="portfolioValue">$1,000.00</strong><small>Cash + positions</small></div>
-<div class="stat-card"><span>Positions</span><strong id="positionsCount">0</strong><small>Open paper positions</small></div>
-</section>
-
-<section class="section"><div class="eyebrow">AI ENGINE</div><h2>Current Analysis</h2><div id="analysisResult" class="analysis-card"><div class="analysis-status">READY</div><p>Choose a market and press <strong>Run AI Trader</strong>.</p><p class="analysis-note">TradeMind will calculate the signal, confidence, trend, risk, stop loss, take profit and technical reasons.</p></div></section>
-
-<section class="section"><div class="eyebrow">RISK CONTROL</div><h2>Protection</h2><div class="risk-grid"><div><span>Stop Loss</span><strong>ATR Based</strong></div><div><span>Take Profit</span><strong>ATR Based</strong></div><div><span>Trade Size</span><strong>$50</strong></div><div><span>Real Money</span><strong class="good">DISABLED</strong></div></div></section>
-
-<section class="section"><div class="eyebrow">SUPPORTED MARKETS</div><h2>Choose a market</h2><p class="muted">Powered by Twelve Data where the selected market is available to the configured API plan.</p><div id="marketButtons" class="market-buttons"></div></section>
-
-<section class="section"><div class="eyebrow">OPEN POSITIONS</div><h2>Paper Portfolio</h2><div id="positionsContainer"><div class="empty-state">No open paper positions.</div></div></section>
-
-<section class="panel"><div class="panel-header"><div><p class="eyebrow">PERFORMANCE</p><h3>Trade Performance</h3></div><span class="live-label">PAPER DATA</span></div><div class="performance-grid"><div class="performance-card"><span>Total Trades</span><strong id="totalTrades">0</strong></div><div class="performance-card"><span>Winning Trades</span><strong id="winningTrades">0</strong></div><div class="performance-card"><span>Losing Trades</span><strong id="losingTrades">0</strong></div><div class="performance-card"><span>Realized P/L</span><strong id="realizedPnl">$0.00</strong></div></div></section>
-
-<section class="panel"><div class="panel-header"><div><p class="eyebrow">ACTIVITY HISTORY</p><h3>AI Analysis + Paper Trades</h3></div><span class="live-label">LATEST 50</span></div><div id="activityHistoryContainer"><div class="empty-state">No activity yet. Run an analysis to begin.</div></div></section>
-
-<section class="warning-card"><strong>⚠️ PAPER TRADING ONLY</strong><p>TradeMind currently uses simulated money. No real-money trades are enabled.</p></section>
-</main>
-
-<script>
-let markets={};let currentMarket="BTC/USD";let busy=false;
-const $=id=>document.getElementById(id);
-function money(v){const n=Number(v);return Number.isFinite(n)?"$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
-function num(v,d=4){const n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):"—"}
-function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
-function sigClass(s){return s==="BUY"?"good":s==="SELL"?"bad":"warn"}
-
-async function loadMarkets(){
- const r=await fetch("/api/markets",{cache:"no-store"});const d=await r.json();
- if(!r.ok||!d.success)throw new Error(d.error||"Could not load markets.");
- markets=d.markets||{};const select=$("marketSelect");select.innerHTML="";
- Object.values(markets).forEach(info=>{const o=document.createElement("option");o.value=info.symbol;o.textContent=`${info.name} — ${info.symbol}`;select.appendChild(o)});
- select.value=currentMarket;renderMarketButtons();updateLabels()
-}
-function updateLabels(){const info=markets[currentMarket];$("marketName").textContent=info?`${info.name} — ${currentMarket}`:currentMarket;$("marketLabel").textContent=currentMarket}
-function renderMarketButtons(){const box=$("marketButtons");box.innerHTML="";Object.values(markets).forEach(info=>{const b=document.createElement("button");b.type="button";b.innerHTML=`${esc(info.name)}<strong>${esc(info.symbol)}</strong>`;b.onclick=()=>selectMarket(info.symbol);box.appendChild(b)})}
-async function selectMarket(m){
- currentMarket=m;
- $("marketSelect").value=m;
- updateLabels();
-
- $("heroPrice").textContent="Loading...";
- $("marketPriceValue").textContent="Loading...";
-
- clearAnalysis();
-
- try{
-   const r=await fetch("/api/price?market="+encodeURIComponent(currentMarket),{cache:"no-store"});
-   const d=await r.json();
-
-   if(!r.ok||!d.success)throw new Error(d.error||"Could not load market price.");
-
-   const price=Number(d.price);
-
-   if(Number.isFinite(price)){
-     $("heroPrice").textContent=num(price);
-     $("marketPriceValue").textContent=num(price);
-   }else{
-     throw new Error("Market price is unavailable.");
-   }
-
-   $("analysisResult").innerHTML=
-     `<div class="analysis-status">MARKET SELECTED</div>
-      <p><strong>${esc(currentMarket)}</strong> is ready.</p>
-      <p class="analysis-note">
-        Current market price: <strong>${num(price)}</strong>.
-        Press <strong>Run AI Trader</strong> to analyze this market and execute a paper trade if the signal qualifies.
-      </p>`;
- }catch(e){
-   $("heroPrice").textContent="—";
-   $("marketPriceValue").textContent="—";
-
-   $("analysisResult").innerHTML=
-     `<div class="analysis-status">READY</div>
-      <p>Selected market: <strong>${esc(currentMarket)}</strong></p>
-      <p class="analysis-note">
-        ${esc(e.message||"Market price is temporarily unavailable.")}
-        Press <strong>Run AI Trader</strong> to try the full analysis.
-      </p>`;
- }
-
- await loadPortfolio();
-}
-function changeMarket(){selectMarket($("marketSelect").value)}
-function clearAnalysis(){$("heroPrice").textContent="—";$("marketPriceValue").textContent="—";$("analysisResult").innerHTML=`<div class="analysis-status">READY</div><p>Selected market: <strong>${esc(currentMarket)}</strong></p><p class="analysis-note">Press <strong>Run AI Trader</strong> to analyze this market. Previous market data has been cleared.</p>`}
-function renderAnalysis(a,t){const s=a.signal||"HOLD";$("analysisResult").innerHTML=`<div class="analysis-status">LIVE ANALYSIS • ${esc(a.data_interval||"DATA")}</div><div class="analysis-grid"><div class="metric"><span>Signal</span><strong class="${sigClass(s)}">${esc(s)}</strong></div><div class="metric"><span>Confidence</span><strong>${num(a.confidence,0)}%</strong></div><div class="metric"><span>Trend</span><strong>${esc(a.trend||a.strength||"—")}</strong></div><div class="metric"><span>Risk</span><strong>${esc(a.risk||"—")}</strong></div><div class="metric"><span>Stop Loss</span><strong>${num(a.stop_loss)}</strong></div><div class="metric"><span>Take Profit</span><strong>${num(a.take_profit)}</strong></div><div class="metric"><span>EMA20</span><strong>${num(a.ema20)}</strong></div><div class="metric"><span>RSI14</span><strong>${num(a.rsi14,2)}</strong></div></div><p><strong>AI explanation:</strong> ${esc(a.explanation||"")}</p><ul class="reason-list">${(a.reasons||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul><p class="analysis-note"><strong>Execution:</strong> ${esc(t?.message||(t?.executed?"Paper order executed.":t?.reason||"Analysis completed."))}</p>`}
-function renderError(e){$("heroPrice").textContent="—";$("marketPriceValue").textContent="—";$("analysisResult").innerHTML=`<div class="analysis-status bad">DATA ERROR</div><p><strong>${esc(currentMarket)}</strong> could not be analyzed.</p><p class="analysis-note">${esc(e)}</p>`}
-
-async function runBot(){
- if(busy)return;busy=true;const b=$("runBotButton");b.disabled=true;b.textContent="⏳ Analyzing...";
- try{const r=await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",body:JSON.stringify({market:currentMarket})});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||"TradeMind could not complete the analysis.");
- const a=d.analysis||{};$("heroPrice").textContent=num(a.price);$("marketPriceValue").textContent=num(a.price);renderAnalysis(a,d.trade||{});await Promise.all([loadPortfolio(),loadPerformance(),loadHistory()])
- }catch(e){renderError(e.message||String(e))}finally{busy=false;b.disabled=false;b.textContent="🤖 Run AI Trader"}
-}
-async function loadPortfolio(){
- const r=await fetch("/api/portfolio",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||"Could not load portfolio.");
- const p=d.portfolio||{};$("cashValue").textContent=money(p.cash);$("portfolioValue").textContent=money(p.portfolio_value??p.total_value);$("positionsCount").textContent=p.open_positions??(p.positions||[]).length;renderPositions(p.positions||[])
-}
-function renderPositions(ps){const box=$("positionsContainer");if(!ps.length){box.innerHTML='<div class="empty-state">No open paper positions.</div>';return}box.innerHTML=ps.map(p=>`<div class="position-card"><div><strong>${esc(p.market)}</strong><span>Qty: ${num(p.quantity,8)}</span></div><div><span>Entry: ${num(p.avg_price)}</span><span>Current: ${num(p.current_price)}</span></div><div><strong>Value: ${money(p.value)}</strong><span class="${Number(p.unrealized_pnl??p.pnl??0)>=0?"good":"bad"}">P/L: ${money(p.unrealized_pnl??p.pnl)}</span></div></div>`).join("")}
-async function loadPerformance(){
- const r=await fetch("/api/trades?limit=500",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||"Could not load performance.");
- const ts=d.trades||[];const sells=ts.filter(t=>String(t.side).toUpperCase()==="SELL");const wins=sells.filter(t=>Number(t.pnl||0)>0);const losses=sells.filter(t=>Number(t.pnl||0)<0);const realized=sells.reduce((s,t)=>s+Number(t.pnl||0),0);
- $("totalTrades").textContent=ts.length;$("winningTrades").textContent=wins.length;$("losingTrades").textContent=losses.length;$("realizedPnl").textContent=money(realized);$("realizedPnl").className=realized>=0?"good":"bad"
-}
-function formatTime(v){if(!v)return"";const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString()}
-async function loadHistory(){
- const r=await fetch("/api/history?limit=50",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||"Could not load activity history.");
- const h=d.history||[];const box=$("activityHistoryContainer");if(!h.length){box.innerHTML='<div class="empty-state">No activity yet. Run an analysis to begin.</div>';return}
- box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Time</th><th>Market</th><th>Type</th><th>Signal</th><th>Price</th><th>Status</th><th>Confidence</th></tr></thead><tbody>${h.map(x=>`<tr><td>${esc(formatTime(x.created_at))}</td><td>${esc(x.market)}</td><td>${esc(x.record_type)}</td><td class="${sigClass(x.signal)}">${esc(x.signal||"—")}</td><td>${num(x.price)}</td><td>${esc(x.status||x.execution_status||"—")}</td><td>${x.confidence==null?"—":num(x.confidence,0)+"%"}</td></tr>`).join("")}</tbody></table></div>`
-}
-async function resetPaperAccount(){
- if(!confirm("Reset the TradeMind paper account to $1,000.00?\n\nThis clears paper positions, paper trades, and AI analysis history."))return;
- const b=$("resetButton");b.disabled=true;b.textContent="Resetting...";
- try{const r=await fetch("/api/reset-paper",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store"});const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||"Reset failed.");clearAnalysis();await Promise.all([loadPortfolio(),loadPerformance(),loadHistory()]);alert("Paper account reset successfully to $1,000.00.")}catch(e){alert(e.message||String(e))}finally{b.disabled=false;b.textContent="Reset Paper Account"}
-}
-async function boot(){try{await loadMarkets();await Promise.all([loadPortfolio(),loadPerformance(),loadHistory()])}catch(e){$("analysisResult").innerHTML=`<div class="analysis-status bad">STARTUP ERROR</div><p>${esc(e.message||String(e))}</p>`}}
-boot();
-</script>
-</body>
- </html>
- 
+<section class="hero"><div class="eyebrow">AUTONOMOUS MARKET ENGINE</div><h1>AI scans. AI manages.<br>You monitor.</h1><p>TradeMind scans configured markets, manages simulated positions, and records results. This system does not place real broker orders.</p><div class="toolbar"><select id="marketSelect" aria-label="Chart market"></select><button id="analyzeButton" type="button">Analyze Selected</button><button id="scanButton" type="button">Run Scan Now</button><button id="resetButton" class="danger" type="button">Reset Paper Account</button></div><div class="statusline" id="engineStatus">Checking engine status…</div></section>
+<section class="stats"><div class="stat"><span>Available Cash</span><strong id="cashValue">—</strong><small>Unallocated paper balance</small></div><div class="stat"><span>Total Portfolio Value</span><strong id="portfolioValue">—</strong><small>Cash + open positions</small></div><div class="stat"><span>Unrealized P/L</span><strong id="unrealizedPnl">—</strong><small>Open positions</small></div><div class="stat"><span>Open Positions</span><strong id="positionsCount">0</strong><small id="positionLimit">Max positions configured</small></div></section>
+<section class="panel"><div class="eyebrow">LIVE CHART</div><h2 id="chartHeading">Market chart</h2><p class="muted">TradingView chart display only. It does not execute or confirm TradeMind orders.</p><div class="chart-wrap" id="chartWrap"><iframe id="tradingViewFrame" title="TradingView market chart" loading="lazy" referrerpolicy="origin" src="https://www.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=FX%3AEURUSD&interval=60&hidesidetoolbar=1&symboledit=1&saveimage=0&toolbarbg=%2307111f&studies=%5B%5D&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&locale=en"></iframe></div><p class="tiny">Chart symbols can differ from Twelve Data symbols. If a symbol does not load, use TradingView's own symbol search.</p></section>
+<div class="grid2"><section class="panel"><div class="eyebrow">LATEST ANALYSIS</div><h2>AI Decision</h2><div class="metric-grid"><div class="metric"><span>Signal</span><strong id="signalValue">—</strong></div><div class="metric"><span>Confidence</span><strong id="confidenceValue">—</strong></div><div class="metric"><span>Trend</span><strong id="trendValue">—</strong></div><div class="metric"><span>Market Risk</span><strong id="riskValue">—</strong></div><div class="metric"><span>Entry Price</span><strong id="priceValue">—</strong></div><div class="metric"><span>Stop Loss</span><strong id="stopValue">—</strong></div><div class="metric"><span>Take Profit</span><strong id="takeValue">—</strong></div><div class="metric"><span>RSI / ATR</span><strong id="rsiAtrValue">—</strong></div></div><p class="muted" id="analysisExplanation">The automatic scanner will record analysis when market data is available.</p><div id="analysisReasons" class="muted"></div></section>
+<section class="panel"><div class="eyebrow">PERFORMANCE</div><h2>Closed Trade Results</h2><div class="metric-grid"><div class="metric"><span>Closed Trades</span><strong id="totalTrades">0</strong></div><div class="metric"><span>Winning Trades</span><strong id="winningTrades" class="good">0</strong></div><div class="metric"><span>Losing Trades</span><strong id="losingTrades" class="bad">0</strong></div><div class="metric"><span>Realized P/L</span><strong id="realizedPnl">$0.00</strong></div></div><p class="muted">Entries and exits are separate records. Performance statistics count closed-position exit records only.</p></section></div>
+<section class="panel"><div class="eyebrow">CONFIGURED MARKETS</div><h2>Market Scanner</h2><p class="muted">The engine attempts all configured markets; access depends on Twelve Data symbol coverage, plan limits, and current market availability.</p><div class="market-grid" id="marketGrid"></div></section>
+<section class="panel"><div class="eyebrow">PAPER PORTFOLIO</div><h2>Open Positions</h2><div class="table-wrap"><table><thead><tr><th>Market</th><th>Side</th><th>Entry</th><th>Current</th><th>Stop Loss</th><th>Take Profit</th><th>Value</th><th>Unrealized P/L</th></tr></thead><tbody id="positionsBody"><tr><td colspan="8">Loading positions…</td></tr></tbody></table></div></section>
+<section class="panel"><div class="eyebrow">PERSISTENT ACTIVITY</div><h2>Analysis + Trade History</h2><div class="table-wrap"><table><thead><tr><th>Time</th><th>Market</th><th>Type</th><th>Signal / Side</th><th>Price</th><th>Status</th><th>P/L</th></tr></thead><tbody id="historyBody"><tr><td colspan="7">Loading history…</td></tr></tbody></table></div></section>
+<section class="panel warning"><strong>Safety mode: paper trading only</strong><p>No real broker is connected. The broker-status endpoint is only a placeholder for future integration. Live broker execution is not implemented or enabled. Paper results do not guarantee future profits.</p></section>
+</main><script>
+const $=id=>document.getElementById(id);let markets={};let selectedMarket='EUR/USD';let scanBusy=false;
+function money(v){const n=Number(v);return Number.isFinite(n)?'$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}
+function num(v,d=4){const n=Number(v);return Number.isFinite(n)?n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}):'—'}
+function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
+function cls(v){return v==='BUY'||v==='LONG'||Number(v)>0?'good':v==='SELL'||v==='SHORT'||Number(v)<0?'bad':'warn'}
+async function api(url,options={}){const r=await fetch(url,{cache:'no-store',...options});const d=await r.json().catch(()=>({}));if(!r.ok||d.success===false)throw new Error(d.error||`Request failed (${r.status})`);return d}
+function chartSymbol(symbol){const m={'EUR/USD':'FX:EURUSD','GBP/USD':'FX:GBPUSD','USD/JPY':'FX:USDJPY','GBP/JPY':'FX:GBPJPY','USD/CAD':'FX:USDCAD','AUD/USD':'FX:AUDUSD','NZD/USD':'FX:NZDUSD','BTC/USD':'BITSTAMP:BTCUSD','ETH/USD':'BITSTAMP:ETHUSD','XAU/USD':'OANDA:XAUUSD','XAG/USD':'OANDA:XAGUSD','WTI/USD':'TVC:USOIL'};return m[symbol]||'FX:EURUSD'}
+function updateChart(){const s=$('marketSelect').value||selectedMarket;selectedMarket=s;$('chartHeading').textContent='TradingView chart — '+s;$('tradingViewFrame').src='https://www.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol='+encodeURIComponent(chartSymbol(s))+'&interval=60&hidesidetoolbar=1&symboledit=1&saveimage=0&toolbarbg=%2307111f&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&locale=en'}
+async function loadMarkets(){const d=await api('/api/markets');markets=d.markets||{};const sel=$('marketSelect');sel.innerHTML=Object.values(markets).map(m=>`<option value="${esc(m.symbol)}">${esc(m.name)} — ${esc(m.symbol)}</option>`).join('');if(markets[selectedMarket])sel.value=selectedMarket;else{selectedMarket=Object.keys(markets)[0];sel.value=selectedMarket}sel.onchange=()=>{selectedMarket=sel.value;updateChart()};$('marketGrid').innerHTML=Object.values(markets).map(m=>`<div class="market-tile"><strong>${esc(m.symbol)}</strong><span>${esc(m.name)} · ${esc(m.asset_type)}</span></div>`).join('');updateChart()}
+async function loadStatus(){try{const [s,b]=await Promise.all([api('/api/autopilot-status'),api('/api/broker-status')]);$('engineStatus').innerHTML=`<span class="good">● AUTOPILOT ${s.enabled?'ENABLED':'DISABLED'}</span> · Scan interval ${Math.round(s.interval_seconds/60)} min · Max ${s.max_open_positions} open positions · Per-position allocation cap ${(s.risk_per_trade*100).toFixed(1)}% of equity · Broker: ${b.connected?'connected':'not connected'} · Real orders OFF`}catch(e){$('engineStatus').textContent='Engine status unavailable: '+e.message}}
+function renderAnalysis(a){$('signalValue').textContent=a.signal||'—';$('signalValue').className=cls(a.signal);$('confidenceValue').textContent=a.confidence==null?'—':a.confidence+'%';$('trendValue').textContent=a.trend||a.strength||'—';$('riskValue').textContent=a.risk||'—';$('priceValue').textContent=num(a.price);$('stopValue').textContent=num(a.stop_loss);$('takeValue').textContent=num(a.take_profit);$('rsiAtrValue').textContent=`${num(a.rsi14,2)} / ${num(a.atr14??a.atr,5)}`;$('analysisExplanation').textContent=a.explanation||'';$('analysisReasons').innerHTML=(a.reasons||[]).map(x=>`<div>• ${esc(x)}</div>`).join('')}
+async function analyzeSelected(){const m=$('marketSelect').value;$('analyzeButton').disabled=true;try{const d=await api('/api/analysis?market='+encodeURIComponent(m));renderAnalysis(d.analysis);const p=await api('/api/price?market='+encodeURIComponent(m));$('priceValue').textContent=num(p.price)}catch(e){$('analysisExplanation').textContent='Analysis unavailable: '+e.message}finally{$('analyzeButton').disabled=false}}
+async function runScan(){if(scanBusy)return;scanBusy=true;$('scanButton').disabled=true;$('engineStatus').textContent='Running a manual one-off scan across all configured markets (paper only)…';try{const d=await api('/api/autonomous-run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const trades=(d.results||[]).filter(x=>x.action==='PAPER_TRADE_EXECUTED'||x.trade?.executed).length;const errors=(d.results||[]).filter(x=>x.action==='DATA_ERROR'||x.action==='ERROR').length;$('engineStatus').textContent=`Scan completed: ${d.markets_scanned} markets attempted · ${trades} executed paper actions · ${errors} data errors. Background autopilot remains separate.`;await refreshAll()}catch(e){$('engineStatus').textContent='Scan error: '+e.message}finally{scanBusy=false;$('scanButton').disabled=false}}
+async function loadPortfolio(){const d=await api('/api/portfolio');const p=d.portfolio||d;$('cashValue').textContent=money(p.cash??p.balance);$('portfolioValue').textContent=money(p.portfolio_value??p.total_value);$('unrealizedPnl').textContent=money(p.unrealized_pnl);$('unrealizedPnl').className=Number(p.unrealized_pnl||0)>=0?'good':'bad';$('positionsCount').textContent=p.open_positions??(p.positions||[]).length;const rows=p.positions||[];$('positionsBody').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.market)}</td><td class="${cls(x.side)}">${esc(x.side||'LONG')}</td><td>${num(x.avg_price)}</td><td>${x.current_price==null?'—':num(x.current_price)}</td><td>${num(x.stop_loss)}</td><td>${num(x.take_profit)}</td><td>${money(x.value)}</td><td class="${Number(x.unrealized_pnl||0)>=0?'good':'bad'}">${money(x.unrealized_pnl)}</td></tr>`).join(''):'<tr><td colspan="8">No open positions.</td></tr>'}
+async function loadPerformance(){const d=await api('/api/trades?limit=500');const rows=d.trades||[];const exits=rows.filter(t=>['SELL','BUY'].includes(String(t.side).toUpperCase())&&Number(t.pnl||0)!==0 || ['STOP_LOSS','TAKE_PROFIT','AI_EXIT'].includes(String(t.signal).toUpperCase()));const wins=exits.filter(t=>Number(t.pnl||0)>0).length;const losses=exits.filter(t=>Number(t.pnl||0)<0).length;const realized=exits.reduce((sum,t)=>sum+Number(t.pnl||0),0);$('totalTrades').textContent=exits.length;$('winningTrades').textContent=wins;$('losingTrades').textContent=losses;$('realizedPnl').textContent=money(realized);$('realizedPnl').className=realized>=0?'good':'bad'}
+function time(v){if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?String(v):d.toLocaleString()}
+async function loadHistory(){const d=await api('/api/history?limit=100');const rows=d.history||[];$('historyBody').innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(time(x.created_at))}</td><td>${esc(x.market)}</td><td>${esc(x.record_type||'—')}</td><td>${esc(x.signal||x.side||'—')}</td><td>${x.price==null?'—':num(x.price)}</td><td>${esc(x.status||x.execution_status||'—')}</td><td>${x.pnl==null?'—':money(x.pnl)}</td></tr>`).join(''):'<tr><td colspan="7">No activity yet.</td></tr>'}
+async function refreshAll(){try{await Promise.all([loadPortfolio(),loadPerformance(),loadHistory(),loadStatus()])}catch(e){$('engineStatus').textContent='Refresh warning: '+e.message}}
+async function resetAccount(){if(!confirm('Reset paper account to $1,000 and permanently clear paper positions and history?'))return;const b=$('resetButton');b.disabled=true;try{await api('/api/reset-paper',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});await refreshAll();alert('Paper account reset.')}catch(e){alert('Reset failed: '+e.message)}finally{b.disabled=false}}
+$('analyzeButton').addEventListener('click',analyzeSelected);$('scanButton').addEventListener('click',runScan);$('resetButton').addEventListener('click',resetAccount);
+async function boot(){try{await loadMarkets();await refreshAll();await analyzeSelected();}catch(e){$('engineStatus').textContent='Startup error: '+e.message}}
+boot();setInterval(()=>{refreshAll()},30000);setInterval(()=>{analyzeSelected()},60000);
+</script></body></html>
