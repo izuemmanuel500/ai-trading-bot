@@ -11,6 +11,11 @@ app = Flask(__name__)
 
 STARTING_BALANCE = 1000.00
 TRADE_AMOUNT = 50.00
+RISK_PER_TRADE = 0.05
+MAX_OPEN_POSITIONS = 3
+AUTOPILOT_MIN_CONFIDENCE = 70
+AUTOPILOT_INTERVAL_SECONDS = 300  # 5 minutes to reduce market-data API pressure
+AUTOPILOT_ENABLED = os.getenv("TRADEMIND_AUTOPILOT", "true").strip().lower() == "true"
 STOP_LOSS_ATR_MULTIPLIER = 1.5
 TAKE_PROFIT_ATR_MULTIPLIER = 2.5
 TRADE_COOLDOWN_SECONDS = 8
@@ -46,6 +51,9 @@ MARKETS = {
     "XAU/USD": {"name": "Gold", "symbol": "XAU/USD", "asset_type": "commodity"},
     "XAG/USD": {"name": "Silver", "symbol": "XAG/USD", "asset_type": "commodity"},
     "WTI/USD": {"name": "WTI Crude Oil", "symbol": "WTI/USD", "asset_type": "commodity"},
+    "USD/CAD": {"name": "US Dollar / Canadian Dollar", "symbol": "USD/CAD", "asset_type": "forex"},
+    "AUD/USD": {"name": "Australian Dollar / US Dollar", "symbol": "AUD/USD", "asset_type": "forex"},
+    "NZD/USD": {"name": "New Zealand Dollar / US Dollar", "symbol": "NZD/USD", "asset_type": "forex"},
 }
 
 
@@ -88,7 +96,9 @@ def set_balance(value):
 def get_position(market):
     result = (
         supabase.table("positions")
-        .select("market,quantity,avg_price")
+        .select(
+            "market,quantity,avg_price,side,stop_loss,take_profit,allocated_capital"
+        )
         .eq("market", market)
         .limit(1)
         .execute()
@@ -100,7 +110,9 @@ def get_position(market):
 def get_all_positions():
     result = (
         supabase.table("positions")
-        .select("market,quantity,avg_price")
+        .select(
+            "market,quantity,avg_price,side,stop_loss,take_profit,allocated_capital"
+        )
         .order("market")
         .execute()
     )
@@ -604,15 +616,27 @@ def analyze_market(market):
             else "HIGH"
         )
 
-    sl = (
+    long_sl = (
         max(0.0, price - a * STOP_LOSS_ATR_MULTIPLIER)
         if a > 0 else 0.0
     )
-
-    tp = (
+    long_tp = (
         price + a * TAKE_PROFIT_ATR_MULTIPLIER
         if a > 0 else 0.0
     )
+    short_sl = (
+        price + a * STOP_LOSS_ATR_MULTIPLIER
+        if a > 0 else 0.0
+    )
+    short_tp = (
+        max(0.0, price - a * TAKE_PROFIT_ATR_MULTIPLIER)
+        if a > 0 else 0.0
+    )
+
+    if signal == "SELL":
+        sl, tp = short_sl, short_tp
+    else:
+        sl, tp = long_sl, long_tp
 
     return {
         "market": market,
@@ -634,6 +658,10 @@ def analyze_market(market):
         "atr": a,
         "stop_loss": sl,
         "take_profit": tp,
+        "long_stop_loss": long_sl,
+        "long_take_profit": long_tp,
+        "short_stop_loss": short_sl,
+        "short_take_profit": short_tp,
         "data_interval": data_interval,
         "reasons": reasons,
         "explanation": (
@@ -648,7 +676,16 @@ def analyze_market(market):
 # PAPER TRADING
 # ============================================================
 
-def paper_buy(market, price, signal="BUY"):
+
+def calculate_trade_amount():
+    """Allocate at most 5% of equity to a single simulated position."""
+    portfolio = get_portfolio()
+    equity = max(0.0, float(portfolio.get("portfolio_value", get_balance())))
+    available_cash = max(0.0, get_balance())
+    return round(min(equity * RISK_PER_TRADE, available_cash), 2)
+
+
+def paper_open(market, price, side, stop_loss, take_profit, signal):
     if get_position(market):
         return {
             "executed": False,
@@ -656,49 +693,62 @@ def paper_buy(market, price, signal="BUY"):
             "message": f"{market} already has an open paper position."
         }
 
-    balance = get_balance()
+    if len(get_all_positions()) >= MAX_OPEN_POSITIONS:
+        return {
+            "executed": False,
+            "reason": "MAX_OPEN_POSITIONS",
+            "message": f"Maximum of {MAX_OPEN_POSITIONS} open paper positions reached."
+        }
 
-    if balance < TRADE_AMOUNT:
+    balance = get_balance()
+    amount = min(calculate_trade_amount(), balance)
+
+    if amount < 10:
         return {
             "executed": False,
             "reason": "INSUFFICIENT_BALANCE",
-            "message": (
-                f"Paper balance is ${balance:.2f}; "
-                f"${TRADE_AMOUNT:.2f} is required."
-            )
+            "message": f"Paper balance is ${balance:.2f}; not enough free cash."
         }
 
-    quantity = TRADE_AMOUNT / price
+    quantity = amount / price
 
-    set_balance(balance - TRADE_AMOUNT)
+    # Both long and short paper positions reserve the same simulated capital.
+    set_balance(balance - amount)
 
     supabase.table("positions").insert({
         "market": market,
         "quantity": quantity,
-        "avg_price": price
+        "avg_price": price,
+        "side": side,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "allocated_capital": amount
     }).execute()
 
     insert_trade(
         market,
-        "BUY",
+        "BUY" if side == "LONG" else "SELL",
         quantity,
         price,
-        TRADE_AMOUNT,
+        amount,
         0.0,
         signal
     )
 
     return {
         "executed": True,
-        "side": "BUY",
+        "side": side,
         "market": market,
         "quantity": quantity,
         "price": price,
-        "value": TRADE_AMOUNT
+        "value": amount,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "message": f"Paper {side} opened automatically."
     }
 
 
-def paper_sell(market, price, signal="SELL"):
+def paper_close(market, price, signal):
     position = get_position(market)
 
     if not position:
@@ -711,11 +761,19 @@ def paper_sell(market, price, signal="SELL"):
 
     quantity = float(position["quantity"])
     avg = float(position["avg_price"])
+    side = str(position.get("side") or "LONG").upper()
+    allocated = float(position.get("allocated_capital") or TRADE_AMOUNT)
 
-    value = quantity * price
-    pnl = (price - avg) * quantity
+    if side == "SHORT":
+        pnl = (avg - price) * quantity
+        return_value = allocated + pnl
+        close_side = "BUY"
+    else:
+        pnl = (price - avg) * quantity
+        return_value = quantity * price
+        close_side = "SELL"
 
-    set_balance(get_balance() + value)
+    set_balance(get_balance() + return_value)
 
     supabase.table("positions").delete().eq(
         "market", market
@@ -723,48 +781,65 @@ def paper_sell(market, price, signal="SELL"):
 
     insert_trade(
         market,
-        "SELL",
+        close_side,
         quantity,
         price,
-        value,
+        return_value,
         pnl,
         signal
     )
 
     return {
         "executed": True,
-        "side": "SELL",
+        "side": close_side,
+        "closed_position_side": side,
         "market": market,
         "quantity": quantity,
         "price": price,
-        "value": value,
-        "pnl": pnl
+        "value": return_value,
+        "pnl": pnl,
+        "message": f"Paper {side} position closed."
     }
 
 
 def apply_risk_rules(market, analysis):
-    if not get_position(market):
+    position = get_position(market)
+    if not position:
         return {"triggered": False}
 
     price = float(analysis["price"])
-    sl = float(analysis["stop_loss"])
-    tp = float(analysis["take_profit"])
+    side = str(position.get("side") or "LONG").upper()
+    sl = float(position.get("stop_loss") or 0)
+    tp = float(position.get("take_profit") or 0)
 
-    if sl > 0 and price <= sl:
-        result = paper_sell(market, price, "STOP_LOSS")
-        return {
-            "triggered": True,
-            "reason": "STOP LOSS",
-            "result": result
-        }
+    # Legacy V5.3 positions did not have stored SL/TP. Set them once here.
+    if sl <= 0 or tp <= 0:
+        if side == "SHORT":
+            sl = float(analysis.get("short_stop_loss") or 0)
+            tp = float(analysis.get("short_take_profit") or 0)
+        else:
+            sl = float(analysis.get("long_stop_loss") or 0)
+            tp = float(analysis.get("long_take_profit") or 0)
 
-    if tp > 0 and price >= tp:
-        result = paper_sell(market, price, "TAKE_PROFIT")
-        return {
-            "triggered": True,
-            "reason": "TAKE PROFIT",
-            "result": result
-        }
+        supabase.table("positions").update({
+            "stop_loss": sl,
+            "take_profit": tp
+        }).eq("market", market).execute()
+
+    if side == "SHORT":
+        if sl > 0 and price >= sl:
+            result = paper_close(market, price, "STOP_LOSS")
+            return {"triggered": True, "reason": "STOP LOSS", "result": result}
+        if tp > 0 and price <= tp:
+            result = paper_close(market, price, "TAKE_PROFIT")
+            return {"triggered": True, "reason": "TAKE PROFIT", "result": result}
+    else:
+        if sl > 0 and price <= sl:
+            result = paper_close(market, price, "STOP_LOSS")
+            return {"triggered": True, "reason": "STOP LOSS", "result": result}
+        if tp > 0 and price >= tp:
+            result = paper_close(market, price, "TAKE_PROFIT")
+            return {"triggered": True, "reason": "TAKE PROFIT", "result": result}
 
     return {"triggered": False}
 
@@ -785,49 +860,199 @@ def check_trade_protection(market):
     return {"allowed": True}
 
 
-def execute_trade_decision(market, analysis):
+def execute_trade_decision(market, analysis, autonomous=False):
     signal = analysis["signal"]
     price = float(analysis["price"])
 
     with TRADE_EXECUTION_LOCK:
         protection = check_trade_protection(market)
 
-        if not protection["allowed"]:
+        if not protection["allowed"] and not autonomous:
             return {
                 "executed": False,
                 "reason": protection["reason"],
                 "remaining_seconds": protection["remaining_seconds"],
-                "message": (
-                    "Trade protection is active. "
-                    "Please wait before running again."
-                )
+                "message": "Trade protection is active."
             }
 
         LAST_TRADE_EXECUTION[market] = time.time()
 
+        # Always protect an existing position before considering a new trade.
         risk = apply_risk_rules(market, analysis)
-
         if risk.get("triggered"):
             return {
                 "executed": risk["result"].get("executed", False),
                 "risk_action": risk
             }
 
-        if signal == "BUY":
-            return paper_buy(market, price, "BUY")
+        position = get_position(market)
 
-        if signal == "SELL":
-            return paper_sell(market, price, "SELL")
+        # No position: open in the direction of a strong signal.
+        if not position:
+            if signal == "BUY":
+                return paper_open(
+                    market,
+                    price,
+                    "LONG",
+                    float(analysis.get("long_stop_loss") or analysis["stop_loss"]),
+                    float(analysis.get("long_take_profit") or analysis["take_profit"]),
+                    "BUY"
+                )
+
+            if signal == "SELL":
+                return paper_open(
+                    market,
+                    price,
+                    "SHORT",
+                    float(analysis.get("short_stop_loss") or analysis["stop_loss"]),
+                    float(analysis.get("short_take_profit") or analysis["take_profit"]),
+                    "SELL"
+                )
+
+            return {
+                "executed": False,
+                "reason": "HOLD",
+                "message": "AI signal is HOLD. No paper order was executed."
+            }
+
+        side = str(position.get("side") or "LONG").upper()
+
+        # Existing long + bearish signal -> close the long.
+        if side == "LONG" and signal == "SELL":
+            return paper_close(market, price, "AI_EXIT")
+
+        # Existing short + bullish signal -> close the short.
+        if side == "SHORT" and signal == "BUY":
+            return paper_close(market, price, "AI_EXIT")
 
         return {
             "executed": False,
-            "reason": "HOLD",
-            "message": (
-                "AI signal is HOLD. "
-                "No paper order was executed."
-            )
+            "reason": "POSITION_HELD",
+            "message": f"{side} position kept open; signal={signal}."
         }
 
+
+AUTONOMOUS_SCAN_LOCK = threading.Lock()
+
+def autonomous_scan():
+    """Scan every configured market and manage paper positions automatically."""
+    results = []
+    started = datetime.now(timezone.utc).isoformat()
+
+    # Protect/manage positions that were already open when this scan began.
+    initially_open = {p["market"] for p in get_all_positions()}
+    for pos in get_all_positions():
+        market = pos["market"]
+        try:
+            analysis = analyze_market(market)
+            trade = execute_trade_decision(market, analysis, autonomous=True)
+            action = "PAPER_TRADE_EXECUTED" if trade.get("executed") else trade.get("reason", "MONITOR")
+            if trade.get("risk_action", {}).get("triggered"):
+                action = "RISK_EXIT"
+            results.append({
+                "market": market,
+                "signal": analysis["signal"],
+                "confidence": analysis["confidence"],
+                "action": action,
+                "trade": trade
+            })
+        except Exception as exc:
+            results.append({
+                "market": market,
+                "action": "ERROR",
+                "error": str(exc)
+            })
+
+    # Then scan all configured markets for new opportunities.
+    for market in MARKETS:
+        try:
+            analysis = analyze_market(market)
+
+            existing = get_position(market)
+            if existing or market in initially_open:
+                # Do not reopen/reverse a position in the same scan cycle.
+                continue
+
+            if (
+                analysis["signal"] in ("BUY", "SELL")
+                and int(analysis["confidence"]) >= AUTOPILOT_MIN_CONFIDENCE
+            ):
+                trade = execute_trade_decision(
+                    market,
+                    analysis,
+                    autonomous=True
+                )
+            else:
+                trade = {
+                    "executed": False,
+                    "reason": "FILTERED",
+                    "message": "No strong enough setup."
+                }
+
+            status = "PAPER_TRADE_EXECUTED" if trade.get("executed") else trade.get("reason", "NO_TRADE")
+
+            insert_analysis_history(
+                market,
+                analysis.get("signal", "UNKNOWN"),
+                analysis.get("price"),
+                analysis.get("confidence"),
+                analysis.get("risk", ""),
+                status,
+                trade.get("message", ""),
+                analysis.get("data_interval", "")
+            )
+
+            results.append({
+                "market": market,
+                "signal": analysis["signal"],
+                "confidence": analysis["confidence"],
+                "risk": analysis["risk"],
+                "action": status,
+                "trade": trade
+            })
+
+        except Exception as exc:
+            msg = str(exc)
+            try:
+                insert_analysis_history(
+                    market, "ERROR", None, None, "",
+                    "DATA_ERROR", msg, ""
+                )
+            except Exception:
+                pass
+            results.append({
+                "market": market,
+                "action": "DATA_ERROR",
+                "error": msg
+            })
+
+    return {
+        "success": True,
+        "paper_only": True,
+        "real_orders_disabled": True,
+        "started_at": started,
+        "markets_scanned": len(MARKETS),
+        "max_open_positions": MAX_OPEN_POSITIONS,
+        "risk_per_trade": RISK_PER_TRADE,
+        "results": results,
+        "portfolio": get_portfolio()
+    }
+
+
+def autopilot_worker():
+    print("TradeMind V7 autopilot worker started (single-process mode).")
+    while True:
+        try:
+            if AUTONOMOUS_SCAN_LOCK.acquire(blocking=False):
+                try:
+                    autonomous_scan()
+                finally:
+                    AUTONOMOUS_SCAN_LOCK.release()
+            else:
+                print("AUTOPILOT: scan already running; skipping duplicate cycle.")
+        except Exception as exc:
+            print("AUTOPILOT ERROR:", exc)
+        time.sleep(AUTOPILOT_INTERVAL_SECONDS)
 
 # ============================================================
 # PORTFOLIO
@@ -843,33 +1068,50 @@ def get_portfolio():
         market = pos["market"]
         qty = float(pos["quantity"])
         avg = float(pos["avg_price"])
+        side = str(pos.get("side") or "LONG").upper()
+        allocated = float(pos.get("allocated_capital") or TRADE_AMOUNT)
 
         try:
             current = get_market_price(market)
-            value = qty * current
-            pnl = (current - avg) * qty
+
+            if side == "SHORT":
+                value = allocated + ((avg - current) * qty)
+                pnl = (avg - current) * qty
+            else:
+                value = qty * current
+                pnl = (current - avg) * qty
 
             pv += value
             pnl_total += pnl
 
             positions.append({
                 "market": market,
+                "side": side,
                 "quantity": qty,
                 "avg_price": avg,
                 "current_price": current,
                 "value": value,
+                "allocated_capital": allocated,
+                "stop_loss": pos.get("stop_loss"),
+                "take_profit": pos.get("take_profit"),
                 "unrealized_pnl": pnl,
                 "pnl": pnl,
                 "error": None
             })
 
         except Exception as exc:
+            # Preserve the reserved capital estimate when live price data is unavailable.
+            pv += allocated
             positions.append({
                 "market": market,
+                "side": side,
                 "quantity": qty,
                 "avg_price": avg,
                 "current_price": None,
-                "value": 0.0,
+                "value": allocated,
+                "allocated_capital": allocated,
+                "stop_loss": pos.get("stop_loss"),
+                "take_profit": pos.get("take_profit"),
                 "unrealized_pnl": 0.0,
                 "pnl": 0.0,
                 "error": str(exc)
@@ -919,7 +1161,7 @@ def api_run():
 
     try:
         analysis = analyze_market(market)
-        trade = execute_trade_decision(market, analysis)
+        trade = execute_trade_decision(market, analysis, autonomous=False)
 
         status = "NO_TRADE"
 
@@ -981,6 +1223,39 @@ def api_run():
         }), 502
 
 
+@app.route("/api/autonomous-run", methods=["POST"])
+def api_autonomous_run():
+    try:
+        if not AUTONOMOUS_SCAN_LOCK.acquire(blocking=False):
+            return jsonify({"success": False, "paper_only": True, "real_orders_disabled": True, "error": "A market scan is already running."}), 409
+        try:
+            result = autonomous_scan()
+        finally:
+            AUTONOMOUS_SCAN_LOCK.release()
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "paper_only": True,
+            "real_orders_disabled": True,
+            "error": str(exc)
+        }), 500
+
+
+@app.route("/api/autopilot-status")
+def api_autopilot_status():
+    return jsonify({
+        "success": True,
+        "enabled": AUTOPILOT_ENABLED,
+        "interval_seconds": AUTOPILOT_INTERVAL_SECONDS,
+        "min_confidence": AUTOPILOT_MIN_CONFIDENCE,
+        "max_open_positions": MAX_OPEN_POSITIONS,
+        "risk_per_trade": RISK_PER_TRADE,
+        "paper_only": True,
+        "real_orders_disabled": True
+    })
+
+
 @app.route("/api/price")
 def api_price():
     market = str(
@@ -1038,11 +1313,13 @@ def api_analysis():
 @app.route("/api/portfolio")
 def api_portfolio():
     try:
+        portfolio = get_portfolio()
         return jsonify({
             "success": True,
             "paper_only": True,
             "real_orders_disabled": True,
-            "portfolio": get_portfolio()
+            "portfolio": portfolio,
+            **portfolio
         })
 
     except Exception as exc:
@@ -1187,6 +1464,18 @@ def api_market_status():
     })
 
 
+@app.route("/api/broker-status")
+def api_broker_status():
+    # Integration placeholder only. No broker credentials or order execution are enabled.
+    return jsonify({
+        "success": True,
+        "connected": False,
+        "mode": "PAPER_ONLY",
+        "real_orders_enabled": False,
+        "message": "No broker is connected. Real-money execution is deliberately disabled."
+    })
+
+
 @app.route("/api/markets")
 def api_markets():
     return jsonify({
@@ -1199,7 +1488,7 @@ def api_markets():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "TradeMind V5.3",
+        "version": "TradeMind V7 Autonomous",
         "storage": "Supabase",
         "paper_only": True,
         "real_orders_disabled": True,
@@ -1208,7 +1497,11 @@ def health():
         "duplicate_protection": True,
         "analysis_history": True,
         "combined_history": True,
-        "persistent_storage": True
+        "persistent_storage": True,
+        "autopilot_enabled": AUTOPILOT_ENABLED,
+        "autopilot_interval_seconds": AUTOPILOT_INTERVAL_SECONDS,
+        "max_open_positions": MAX_OPEN_POSITIONS,
+        "risk_per_trade": RISK_PER_TRADE
     })
 
 
@@ -1241,17 +1534,27 @@ if os.getenv(
     reset_paper_account()
 
 print("=" * 60)
-print("TradeMind V5.3 started")
+print("TradeMind V7 Autonomous started")
 print("PAPER TRADING ONLY")
 print("REAL ORDERS DISABLED")
 print("STORAGE: SUPABASE")
+print("Autopilot:", AUTOPILOT_ENABLED)
 print("Markets:", ", ".join(MARKETS.keys()))
 print("=" * 60)
+
+if AUTOPILOT_ENABLED:
+    worker = threading.Thread(
+        target=autopilot_worker,
+        daemon=True,
+        name="trademind-autopilot"
+    )
+    worker.start()
+
 
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.getenv("PORT", "5000")),
         debug=False
-        )
-                 
+)
+    
