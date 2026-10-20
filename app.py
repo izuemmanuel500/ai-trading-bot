@@ -370,24 +370,26 @@ def twelve_data_request(endpoint, params):
             params=p,
             timeout=20
         )
-        response.raise_for_status()
-
     except requests.RequestException as exc:
-        raise RuntimeError(
-            f"Twelve Data network error: {exc}"
-        ) from exc
+        raise RuntimeError(f"Twelve Data network error: {exc}") from exc
 
     try:
         data = response.json()
-    except ValueError as exc:
-        raise RuntimeError(
-            "Twelve Data returned invalid JSON."
-        ) from exc
+    except ValueError:
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"Twelve Data HTTP error {response.status_code} on {endpoint}."
+            )
+        raise RuntimeError("Twelve Data returned invalid JSON.")
 
-    if data.get("status") == "error":
+    if response.status_code >= 400:
+        detail = twelve_data_error(data, f"HTTP {response.status_code}")
+        raise RuntimeError(f"Twelve Data HTTP error {response.status_code}: {detail}")
+
+    if isinstance(data, dict) and data.get("status") == "error":
         raise RuntimeError(twelve_data_error(data))
 
-    if "code" in data and data.get("code") not in (None, 200):
+    if isinstance(data, dict) and "code" in data and data.get("code") not in (None, 200):
         raise RuntimeError(twelve_data_error(data))
 
     return data
@@ -540,112 +542,133 @@ def get_market_price(market):
 # ============================================================
 
 def analyze_market(market):
+    """Analyze hourly structure and use a stricter, multi-factor paper signal.
+
+    Confidence is a strategy-strength score, not a guaranteed win probability.
+    """
     candles, data_interval = get_candles(market, "1h", 60)
-
     closes = [float(c["close"]) for c in candles]
-
     if len(closes) < 60:
         raise RuntimeError(
-            f"Not enough candle data for {market}. "
-            f"Received {len(closes)} candles."
+            f"Not enough candle data for {market}. Received {len(closes)} candles."
         )
 
-    price = closes[-1]
+    candle_close = closes[-1]
+    # Prefer a quote for the execution/reference price; fall back to the latest candle.
+    try:
+        price = float(get_market_price(market))
+        price_source = "quote_or_cached_quote"
+    except Exception:
+        price = candle_close
+        price_source = "latest_hourly_candle_fallback"
+
     e20 = ema(closes, 20)
     e50 = ema(closes, 50)
     r = rsi(closes, 14)
     mv, ms = macd(closes)
     a = atr(candles, 14)
 
+    # A little directional confirmation reduces trades against the latest candle.
+    last_candle = candles[-1]
+    candle_open = float(last_candle.get("open", candle_close))
+    candle_bullish = candle_close >= candle_open
+    candle_bearish = candle_close <= candle_open
+
     score = 0
     reasons = []
-
     if e20 > e50:
-        score += 1
-        reasons.append("EMA20 is above EMA50.")
+        score += 2
+        reasons.append("EMA20 is above EMA50 (bullish trend alignment).")
+    elif e20 < e50:
+        score -= 2
+        reasons.append("EMA20 is below EMA50 (bearish trend alignment).")
     else:
-        score -= 1
-        reasons.append("EMA20 is below EMA50.")
+        reasons.append("EMA20 and EMA50 are equal; trend is unclear.")
 
-    if r > 55:
+    if r >= 52:
         score += 1
-        reasons.append("RSI is above the neutral midpoint.")
-    elif r < 45:
+        reasons.append("RSI supports upward momentum.")
+    elif r <= 48:
         score -= 1
-        reasons.append("RSI is below the neutral midpoint.")
+        reasons.append("RSI supports downward momentum.")
     else:
-        reasons.append("RSI is near the neutral midpoint.")
+        reasons.append("RSI is neutral; momentum confirmation is weak.")
 
     if mv > ms:
         score += 1
         reasons.append("MACD is above its signal line.")
-    else:
+    elif mv < ms:
         score -= 1
         reasons.append("MACD is below its signal line.")
 
     if price > e20:
         score += 1
-        reasons.append("Price is above EMA20.")
-    else:
+        reasons.append("Reference price is above EMA20.")
+    elif price < e20:
         score -= 1
-        reasons.append("Price is below EMA20.")
+        reasons.append("Reference price is below EMA20.")
 
-    signal = (
-        "BUY" if score >= 3
-        else "SELL" if score <= -3
-        else "HOLD"
-    )
+    if candle_bullish and e20 > e50:
+        score += 1
+        reasons.append("Latest hourly candle confirms the bullish trend.")
+    elif candle_bearish and e20 < e50:
+        score -= 1
+        reasons.append("Latest hourly candle confirms the bearish trend.")
 
-    confidence = int(
-        min(95, max(50, 50 + abs(score) * 10))
-    )
+    # Approximate nearby structure using recent completed candles.
+    recent = candles[-20:]
+    recent_high = max(float(c.get("high", c["close"])) for c in recent)
+    recent_low = min(float(c.get("low", c["close"])) for c in recent)
+    near_resistance = a > 0 and (recent_high - price) <= a * 0.35
+    near_support = a > 0 and (price - recent_low) <= a * 0.35
+    overextended = a > 0 and abs(price - e20) > a * 1.8
 
-    strength = (
-        "BULLISH" if e20 > e50
-        else "BEARISH" if e20 < e50
-        else "NEUTRAL"
-    )
+    filters = []
+    if r >= 75:
+        filters.append("RSI is extremely high; avoid chasing a possible overbought move.")
+    if r <= 25:
+        filters.append("RSI is extremely low; avoid chasing a possible oversold move.")
+    if overextended:
+        filters.append("Price is extended more than 1.8 ATR from EMA20.")
+    if near_resistance:
+        filters.append("Price is close to recent resistance; BUY entries are blocked.")
+    if near_support:
+        filters.append("Price is close to recent support; SELL entries are blocked.")
 
+    signal = "HOLD"
+    if score >= 4 and e20 > e50 and mv > ms and not (r >= 75 or overextended or near_resistance):
+        signal = "BUY"
+    elif score <= -4 and e20 < e50 and mv < ms and not (r <= 25 or overextended or near_support):
+        signal = "SELL"
+
+    confidence = int(min(80, max(50, 50 + abs(score) * 5)))
+    if signal == "HOLD":
+        confidence = min(confidence, 65)
+
+    strength = "BULLISH" if e20 > e50 else "BEARISH" if e20 < e50 else "NEUTRAL"
     if a <= 0 or price <= 0:
         risk = "UNKNOWN"
     else:
-        ap = (a / price) * 100
-        risk = (
-            "LOW" if ap < 1
-            else "MEDIUM" if ap < 2.5
-            else "HIGH"
-        )
+        atr_percent = (a / price) * 100
+        risk = "LOW" if atr_percent < 1 else "MEDIUM" if atr_percent < 2.5 else "HIGH"
 
-    long_sl = (
-        max(0.0, price - a * STOP_LOSS_ATR_MULTIPLIER)
-        if a > 0 else 0.0
-    )
-    long_tp = (
-        price + a * TAKE_PROFIT_ATR_MULTIPLIER
-        if a > 0 else 0.0
-    )
-    short_sl = (
-        price + a * STOP_LOSS_ATR_MULTIPLIER
-        if a > 0 else 0.0
-    )
-    short_tp = (
-        max(0.0, price - a * TAKE_PROFIT_ATR_MULTIPLIER)
-        if a > 0 else 0.0
-    )
-
-    if signal == "SELL":
-        sl, tp = short_sl, short_tp
-    else:
-        sl, tp = long_sl, long_tp
+    long_sl = max(0.0, price - a * STOP_LOSS_ATR_MULTIPLIER) if a > 0 else 0.0
+    long_tp = price + a * TAKE_PROFIT_ATR_MULTIPLIER if a > 0 else 0.0
+    short_sl = price + a * STOP_LOSS_ATR_MULTIPLIER if a > 0 else 0.0
+    short_tp = max(0.0, price - a * TAKE_PROFIT_ATR_MULTIPLIER) if a > 0 else 0.0
+    sl, tp = (short_sl, short_tp) if signal == "SELL" else (long_sl, long_tp)
 
     return {
         "market": market,
         "name": MARKETS[market]["name"],
         "asset_type": MARKETS[market]["asset_type"],
         "price": price,
+        "candle_close": candle_close,
+        "price_source": price_source,
         "signal": signal,
         "score": score,
         "confidence": confidence,
+        "confidence_note": "Strategy-strength score only; not a statistically validated win probability.",
         "strength": strength,
         "trend": strength,
         "risk": risk,
@@ -664,10 +687,12 @@ def analyze_market(market):
         "short_take_profit": short_tp,
         "data_interval": data_interval,
         "reasons": reasons,
+        "filters": filters,
+        "recent_resistance": recent_high,
+        "recent_support": recent_low,
         "explanation": (
-            f"{MARKETS[market]['name']} is currently "
-            f"{strength.lower()} with a {signal} signal based on "
-            "EMA, RSI, MACD and price structure."
+            f"{MARKETS[market]['name']} is {strength.lower()} with a {signal} signal. "
+            "The strategy checks EMA trend, RSI, MACD, candle direction and nearby price structure."
         )
     }
 
@@ -678,7 +703,7 @@ def analyze_market(market):
 
 
 def calculate_trade_amount():
-    """Allocate at most 5% of equity to a single simulated position."""
+    """Allocate at most 5% of equity to one paper position (not 5% stop-loss risk)."""
     portfolio = get_portfolio()
     equity = max(0.0, float(portfolio.get("portfolio_value", get_balance())))
     available_cash = max(0.0, get_balance())
@@ -713,27 +738,35 @@ def paper_open(market, price, side, stop_loss, take_profit, signal):
     quantity = amount / price
 
     # Both long and short paper positions reserve the same simulated capital.
+    # If the position insert fails, restore cash so the account is not left half-updated.
     set_balance(balance - amount)
+    try:
+        supabase.table("positions").insert({
+            "market": market,
+            "quantity": quantity,
+            "avg_price": price,
+            "side": side,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "allocated_capital": amount
+        }).execute()
+    except Exception:
+        set_balance(balance)
+        raise
 
-    supabase.table("positions").insert({
-        "market": market,
-        "quantity": quantity,
-        "avg_price": price,
-        "side": side,
-        "stop_loss": stop_loss,
-        "take_profit": take_profit,
-        "allocated_capital": amount
-    }).execute()
-
-    insert_trade(
-        market,
-        "BUY" if side == "LONG" else "SELL",
-        quantity,
-        price,
-        amount,
-        0.0,
-        signal
-    )
+    try:
+        insert_trade(
+            market,
+            "BUY" if side == "LONG" else "SELL",
+            quantity,
+            price,
+            amount,
+            0.0,
+            signal
+        )
+    except Exception as exc:
+        # Keep the open position and cash reservation consistent; expose logging failure.
+        print(f"TRADEMIND WARNING: position opened but trade-history insert failed for {market}: {exc}")
 
     return {
         "executed": True,
@@ -807,7 +840,10 @@ def apply_risk_rules(market, analysis):
     if not position:
         return {"triggered": False}
 
-    price = float(analysis["price"])
+    try:
+        price = float(get_market_price(market))
+    except Exception:
+        price = float(analysis["price"])
     side = str(position.get("side") or "LONG").upper()
     sl = float(position.get("stop_loss") or 0)
     tp = float(position.get("take_profit") or 0)
@@ -862,7 +898,10 @@ def check_trade_protection(market):
 
 def execute_trade_decision(market, analysis, autonomous=False):
     signal = analysis["signal"]
-    price = float(analysis["price"])
+    try:
+        price = float(get_market_price(market))
+    except Exception:
+        price = float(analysis["price"])
 
     with TRADE_EXECUTION_LOCK:
         protection = check_trade_protection(market)
@@ -1410,14 +1449,18 @@ def api_paper_account():
 
 @app.route("/api/reset-paper", methods=["POST"])
 def api_reset_paper():
-    try:
-        return jsonify(reset_paper_account())
-
-    except Exception as exc:
+    # Persistent paper history is protected by default. Set this env var only when
+    # an intentional, confirmed account reset is required.
+    if os.getenv("TRADEMIND_ALLOW_RESET", "false").strip().lower() != "true":
         return jsonify({
             "success": False,
-            "error": str(exc)
-        }), 500
+            "paper_only": True,
+            "error": "Paper-account reset is disabled to protect saved Supabase history."
+        }), 403
+    try:
+        return jsonify(reset_paper_account())
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 @app.route("/api/market-status")
@@ -1501,7 +1544,9 @@ def health():
         "autopilot_enabled": AUTOPILOT_ENABLED,
         "autopilot_interval_seconds": AUTOPILOT_INTERVAL_SECONDS,
         "max_open_positions": MAX_OPEN_POSITIONS,
-        "risk_per_trade": RISK_PER_TRADE
+        "risk_per_trade": RISK_PER_TRADE,
+        "strategy": "multi-factor trend/momentum/structure filter",
+        "reset_protected": True
     })
 
 
@@ -1527,11 +1572,8 @@ def server_error(error):
 
 initialize_database()
 
-if os.getenv(
-    "TRADEMIND_RESET_PAPER_ACCOUNT",
-    ""
-).strip().lower() == "true":
-    reset_paper_account()
+# Startup never resets the account: Supabase paper balance, positions and history persist.
+# The reset endpoint is separately disabled unless TRADEMIND_ALLOW_RESET=true.
 
 print("=" * 60)
 print("TradeMind V7 Autonomous started")
@@ -1557,4 +1599,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "5000")),
         debug=False
 )
-    
