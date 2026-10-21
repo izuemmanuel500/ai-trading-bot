@@ -4,10 +4,18 @@ import time
 from datetime import datetime, timezone
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, redirect, session, url_for
 from supabase import create_client, Client
 
 app = Flask(__name__)
+# Flask signs the login cookie using a server-side secret. Never put this in frontend code.
+app.secret_key = os.getenv("TRADEMIND_SESSION_SECRET", "").strip() or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=True,
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14,
+)
 
 STARTING_BALANCE = 1000.00
 TRADE_AMOUNT = 50.00
@@ -15,7 +23,8 @@ RISK_PER_TRADE = 0.05
 MAX_OPEN_POSITIONS = 3
 AUTOPILOT_MIN_CONFIDENCE = 70
 AUTOPILOT_INTERVAL_SECONDS = 300  # 5 minutes to reduce market-data API pressure
-AUTOPILOT_ENABLED = os.getenv("TRADEMIND_AUTOPILOT", "true").strip().lower() == "true"
+# Background autopilot is disabled until a safe per-user scheduler is implemented.
+AUTOPILOT_ENABLED = False
 STOP_LOSS_ATR_MULTIPLIER = 1.5
 TAKE_PROFIT_ATR_MULTIPLIER = 2.5
 TRADE_COOLDOWN_SECONDS = 8
@@ -25,10 +34,11 @@ TWELVE_DATA_URL = "https://api.twelvedata.com"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
 
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not SUPABASE_ANON_KEY:
     raise RuntimeError(
-        "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured on Render."
+        "SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_ANON_KEY must be configured on Render."
     )
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -58,196 +68,234 @@ MARKETS = {
 
 
 # ============================================================
-# SUPABASE PERSISTENT STORAGE
+# AUTHENTICATION + PER-USER SUPABASE STORAGE
 # ============================================================
+
+def current_user_id():
+    user_id = session.get("user_id")
+    if not user_id:
+        raise RuntimeError("Authentication required.")
+    return str(user_id)
+
+
+def ensure_user_account(user_id=None):
+    uid = str(user_id or current_user_id())
+    found = supabase.table("tm_accounts").select("user_id").eq("user_id", uid).limit(1).execute()
+    if not found.data:
+        try:
+            supabase.table("tm_accounts").insert({"user_id": uid, "balance": STARTING_BALANCE}).execute()
+        except Exception:
+            # A parallel first request may have created the account already.
+            found = supabase.table("tm_accounts").select("user_id").eq("user_id", uid).limit(1).execute()
+            if not found.data:
+                raise
+
+
+def initialize_database():
+    # Per-user paper accounts are created only after successful authentication.
+    return None
+
 
 def _single(result):
     data = result.data
     return data[0] if data else None
 
 
-def initialize_database():
-    result = supabase.table("account").select("id").eq("id", 1).limit(1).execute()
-    if not result.data:
-        supabase.table("account").insert({
-            "id": 1,
-            "balance": STARTING_BALANCE
-        }).execute()
-
-
 def get_balance():
-    result = (
-        supabase.table("account")
-        .select("balance")
-        .eq("id", 1)
-        .limit(1)
-        .execute()
-    )
-    row = _single(result)
+    uid = current_user_id()
+    ensure_user_account(uid)
+    row = _single(supabase.table("tm_accounts").select("balance").eq("user_id", uid).limit(1).execute())
     return float(row["balance"]) if row else STARTING_BALANCE
 
 
 def set_balance(value):
-    supabase.table("account").update({
-        "balance": float(value)
-    }).eq("id", 1).execute()
+    uid = current_user_id()
+    ensure_user_account(uid)
+    supabase.table("tm_accounts").update({"balance": float(value), "updated_at": datetime.now(timezone.utc).isoformat()}).eq("user_id", uid).execute()
 
 
 def get_position(market):
-    result = (
-        supabase.table("positions")
-        .select(
-            "market,quantity,avg_price,side,stop_loss,take_profit,allocated_capital"
-        )
-        .eq("market", market)
-        .limit(1)
-        .execute()
-    )
+    uid = current_user_id()
+    result = (supabase.table("tm_positions").select("market,quantity,avg_price,side,stop_loss,take_profit,allocated_capital")
+              .eq("user_id", uid).eq("market", market).limit(1).execute())
     row = _single(result)
     return dict(row) if row else None
 
 
 def get_all_positions():
-    result = (
-        supabase.table("positions")
-        .select(
-            "market,quantity,avg_price,side,stop_loss,take_profit,allocated_capital"
-        )
-        .order("market")
-        .execute()
-    )
+    uid = current_user_id()
+    result = (supabase.table("tm_positions").select("market,quantity,avg_price,side,stop_loss,take_profit,allocated_capital")
+              .eq("user_id", uid).order("market").execute())
     return [dict(r) for r in (result.data or [])]
 
 
 def get_trade_history(limit=100):
+    uid = current_user_id()
     limit = max(1, min(int(limit), 500))
-    result = (
-        supabase.table("trades")
-        .select("id,market,side,quantity,price,value,pnl,signal,created_at")
-        .order("id", desc=True)
-        .limit(limit)
-        .execute()
-    )
+    result = (supabase.table("tm_trades").select("id,market,side,quantity,price,value,pnl,signal,created_at")
+              .eq("user_id", uid).order("id", desc=True).limit(limit).execute())
     return [dict(r) for r in (result.data or [])]
 
 
 def insert_trade(market, side, quantity, price, value, pnl=0.0, signal=""):
-    supabase.table("trades").insert({
-        "market": market,
-        "side": side,
-        "quantity": float(quantity),
-        "price": float(price),
-        "value": float(value),
-        "pnl": float(pnl),
-        "signal": signal,
+    supabase.table("tm_trades").insert({
+        "user_id": current_user_id(), "market": market, "side": side,
+        "quantity": float(quantity), "price": float(price), "value": float(value),
+        "pnl": float(pnl), "signal": signal,
         "created_at": datetime.now(timezone.utc).isoformat()
     }).execute()
 
 
-def insert_analysis_history(
-    market,
-    signal,
-    price=None,
-    confidence=None,
-    risk="",
-    execution_status="ANALYZED",
-    message="",
-    data_interval=""
-):
-    supabase.table("analysis_history").insert({
-        "market": market,
-        "signal": signal,
-        "price": price,
-        "confidence": confidence,
-        "risk": risk,
-        "execution_status": execution_status,
-        "message": message,
-        "data_interval": data_interval,
-        "created_at": datetime.now(timezone.utc).isoformat()
+def insert_analysis_history(market, signal, price=None, confidence=None, risk="", execution_status="ANALYZED", message="", data_interval=""):
+    supabase.table("tm_analysis_history").insert({
+        "user_id": current_user_id(), "market": market, "signal": signal,
+        "price": price, "confidence": confidence, "risk": risk,
+        "execution_status": execution_status, "message": message,
+        "data_interval": data_interval, "created_at": datetime.now(timezone.utc).isoformat()
     }).execute()
 
 
 def get_analysis_history(limit=100):
+    uid = current_user_id()
     limit = max(1, min(int(limit), 500))
-    result = (
-        supabase.table("analysis_history")
-        .select(
-            "id,market,signal,price,confidence,risk,"
-            "execution_status,message,data_interval,created_at"
-        )
-        .order("id", desc=True)
-        .limit(limit)
-        .execute()
-    )
+    result = (supabase.table("tm_analysis_history").select("id,market,signal,price,confidence,risk,execution_status,message,data_interval,created_at")
+              .eq("user_id", uid).order("id", desc=True).limit(limit).execute())
     return [dict(r) for r in (result.data or [])]
 
 
 def get_combined_history(limit=100):
     limit = max(1, min(int(limit), 500))
-
-    trades = get_trade_history(limit)
-    analyses = get_analysis_history(limit)
-
     items = []
-
-    for r in trades:
-        x = dict(r)
-        x.update({
-            "record_type": "TRADE",
-            "status": "PAPER TRADE",
-            "action": x.get("side"),
-            "confidence": None,
-            "risk": "",
-            "execution_status": "PAPER_TRADE_EXECUTED",
-            "message": x.get("signal") or ""
-        })
+    for row in get_trade_history(limit):
+        x = dict(row)
+        x.update({"record_type": "TRADE", "status": "PAPER TRADE", "action": x.get("side"), "confidence": None,
+                  "risk": "", "execution_status": "PAPER_TRADE_EXECUTED", "message": x.get("signal") or ""})
         items.append(x)
-
-    for r in analyses:
-        x = dict(r)
-        x.update({
-            "record_type": "ANALYSIS",
-            "status": x.get("execution_status") or "ANALYZED",
-            "action": x.get("signal"),
-            "side": None,
-            "quantity": None,
-            "value": None,
-            "pnl": 0.0
-        })
+    for row in get_analysis_history(limit):
+        x = dict(row)
+        x.update({"record_type": "ANALYSIS", "status": x.get("execution_status") or "ANALYZED", "action": x.get("signal"),
+                  "side": None, "quantity": None, "value": None, "pnl": 0.0})
         items.append(x)
-
     items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     return items[:limit]
 
 
 def reset_paper_account():
-    supabase.table("positions").delete().neq("market", "").execute()
-    supabase.table("trades").delete().gt("id", 0).execute()
-    supabase.table("analysis_history").delete().gt("id", 0).execute()
+    uid = current_user_id()
+    supabase.table("tm_positions").delete().eq("user_id", uid).execute()
+    supabase.table("tm_trades").delete().eq("user_id", uid).execute()
+    supabase.table("tm_analysis_history").delete().eq("user_id", uid).execute()
+    ensure_user_account(uid)
+    supabase.table("tm_accounts").update({"balance": STARTING_BALANCE, "updated_at": datetime.now(timezone.utc).isoformat()}).eq("user_id", uid).execute()
+    for key in list(LAST_TRADE_EXECUTION):
+        if key.startswith(uid + ":"):
+            LAST_TRADE_EXECUTION.pop(key, None)
+    return {"success": True, "balance": STARTING_BALANCE, "positions_cleared": True,
+            "trades_cleared": True, "analysis_history_cleared": True,
+            "message": "Your paper account reset to $1,000.00."}
 
-    result = (
-        supabase.table("account")
-        .update({"balance": STARTING_BALANCE})
-        .eq("id", 1)
-        .execute()
+
+def supabase_auth_request(path, payload):
+    response = requests.post(
+        f"{SUPABASE_URL}/auth/v1/{path}",
+        headers={"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"},
+        json=payload, timeout=20
     )
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
+    if response.status_code >= 400:
+        message = data.get("msg") or data.get("message") or data.get("error_description") or data.get("error") or "Authentication request failed."
+        raise ValueError(str(message))
+    return data
 
-    if not result.data:
-        supabase.table("account").upsert({
-            "id": 1,
-            "balance": STARTING_BALANCE
-        }).execute()
 
-    LAST_TRADE_EXECUTION.clear()
+@app.before_request
+def protect_private_routes():
+    public_paths = {"/login", "/signup", "/logout", "/health"}
+    if request.path in public_paths or request.path.startswith("/static/"):
+        return None
+    if request.path == "/" or request.path.startswith("/api/"):
+        if not session.get("user_id"):
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "error": "Please log in to continue.", "authentication_required": True}), 401
+            return redirect(url_for("login_page"))
+        try:
+            ensure_user_account(session["user_id"])
+        except Exception as exc:
+            app.logger.exception("Could not initialize user's paper account")
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "error": "Could not load your paper account. Please try again."}), 500
+            return "Could not load your paper account. Please try again.", 500
+    return None
 
-    return {
-        "success": True,
-        "balance": STARTING_BALANCE,
-        "positions_cleared": True,
-        "trades_cleared": True,
-        "analysis_history_cleared": True,
-        "message": "Paper account reset to $1,000.00."
-    }
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup_page():
+    error = ""
+    message = request.args.get("message", "")
+    if request.method == "POST":
+        name = str(request.form.get("name", "")).strip()
+        email = str(request.form.get("email", "")).strip().lower()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if not name:
+            error = "Please enter your name."
+        elif not email or "@" not in email:
+            error = "Enter a valid email address."
+        elif len(password) < 8:
+            error = "Your password must contain at least 8 characters."
+        elif password != confirm:
+            error = "The passwords do not match."
+        else:
+            try:
+                data = supabase_auth_request("signup", {"email": email, "password": password, "data": {"full_name": name}})
+                if data.get("access_token") and data.get("user"):
+                    user = data["user"]
+                    if not user.get("email_confirmed_at") and not user.get("confirmed_at"):
+                        error = "Account created, but email verification is required. Check your inbox, then log in."
+                    else:
+                        session.clear(); session["user_id"] = user["id"]; session["user_email"] = email; session["user_name"] = name; session.permanent = True
+                        ensure_user_account(user["id"])
+                        return redirect(url_for("dashboard"))
+                else:
+                    return redirect(url_for("login_page", message="Account created. Check your email for the verification link before logging in."))
+            except Exception as exc:
+                error = str(exc)
+    return render_template("signup.html", error=error, message=message)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    error = ""
+    message = request.args.get("message", "")
+    if request.method == "POST":
+        email = str(request.form.get("email", "")).strip().lower()
+        password = request.form.get("password", "")
+        try:
+            data = supabase_auth_request("token?grant_type=password", {"email": email, "password": password})
+            user = data.get("user") or {}
+            if not user.get("id") or not data.get("access_token"):
+                raise ValueError("Login was not completed. Please verify your email and try again.")
+            if not (user.get("email_confirmed_at") or user.get("confirmed_at")):
+                raise ValueError("Please verify your email before logging in.")
+            session.clear()
+            session["user_id"] = user["id"]
+            session["user_email"] = user.get("email", email)
+            session["user_name"] = (user.get("user_metadata") or {}).get("full_name", "Trader")
+            session.permanent = True
+            ensure_user_account(user["id"])
+            return redirect(url_for("dashboard"))
+        except Exception as exc:
+            error = str(exc)
+    return render_template("login.html", error=error, message=message)
+
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout_page():
+    session.clear()
+    return redirect(url_for("login_page", message="You have been logged out securely."))
 
 
 # ============================================================
@@ -741,7 +789,8 @@ def paper_open(market, price, side, stop_loss, take_profit, signal):
     # If the position insert fails, restore cash so the account is not left half-updated.
     set_balance(balance - amount)
     try:
-        supabase.table("positions").insert({
+        supabase.table("tm_positions").insert({
+            "user_id": current_user_id(),
             "market": market,
             "quantity": quantity,
             "avg_price": price,
@@ -808,9 +857,9 @@ def paper_close(market, price, signal):
 
     set_balance(get_balance() + return_value)
 
-    supabase.table("positions").delete().eq(
-        "market", market
-    ).execute()
+    supabase.table("tm_positions").delete().eq(
+        "user_id", current_user_id()
+    ).eq("market", market).execute()
 
     insert_trade(
         market,
@@ -857,10 +906,10 @@ def apply_risk_rules(market, analysis):
             sl = float(analysis.get("long_stop_loss") or 0)
             tp = float(analysis.get("long_take_profit") or 0)
 
-        supabase.table("positions").update({
+        supabase.table("tm_positions").update({
             "stop_loss": sl,
             "take_profit": tp
-        }).eq("market", market).execute()
+        }).eq("user_id", current_user_id()).eq("market", market).execute()
 
     if side == "SHORT":
         if sl > 0 and price >= sl:
@@ -883,7 +932,7 @@ def apply_risk_rules(market, analysis):
 def check_trade_protection(market):
     remaining = (
         TRADE_COOLDOWN_SECONDS
-        - (time.time() - LAST_TRADE_EXECUTION.get(market, 0))
+        - (time.time() - LAST_TRADE_EXECUTION.get(current_user_id() + ":" + market, 0))
     )
 
     if remaining > 0:
@@ -914,7 +963,7 @@ def execute_trade_decision(market, analysis, autonomous=False):
                 "message": "Trade protection is active."
             }
 
-        LAST_TRADE_EXECUTION[market] = time.time()
+        LAST_TRADE_EXECUTION[current_user_id() + ":" + market] = time.time()
 
         # Always protect an existing position before considering a new trade.
         risk = apply_risk_rules(market, analysis)
@@ -1531,7 +1580,7 @@ def api_markets():
 def health():
     return jsonify({
         "status": "ok",
-        "version": "TradeMind V7 Autonomous",
+        "version": "TradeMind V8 Multi-User Paper Trading",
         "storage": "Supabase",
         "paper_only": True,
         "real_orders_disabled": True,
@@ -1576,7 +1625,7 @@ initialize_database()
 # The reset endpoint is separately disabled unless TRADEMIND_ALLOW_RESET=true.
 
 print("=" * 60)
-print("TradeMind V7 Autonomous started")
+print("TradeMind V8 Multi-User Paper Trading started")
 print("PAPER TRADING ONLY")
 print("REAL ORDERS DISABLED")
 print("STORAGE: SUPABASE")
@@ -1584,7 +1633,7 @@ print("Autopilot:", AUTOPILOT_ENABLED)
 print("Markets:", ", ".join(MARKETS.keys()))
 print("=" * 60)
 
-if AUTOPILOT_ENABLED:
+if False and AUTOPILOT_ENABLED:
     worker = threading.Thread(
         target=autopilot_worker,
         daemon=True,
