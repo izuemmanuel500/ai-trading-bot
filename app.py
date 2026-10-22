@@ -21,8 +21,8 @@ app.config.update(
 )
 
 STARTING_BALANCE = 1000.00
-TRADE_AMOUNT = 50.00
-RISK_PER_TRADE = 0.05
+TRADE_AMOUNT = 0.00  # position size is calculated from equity, stop distance, and risk cap
+RISK_PER_TRADE = 0.01  # target risk per trade: 1% of current paper equity
 MAX_OPEN_POSITIONS = 3
 AUTOPILOT_MIN_CONFIDENCE = 70
 AUTOPILOT_INTERVAL_SECONDS = 300  # 5 minutes to reduce market-data API pressure
@@ -786,16 +786,24 @@ def paper_open(market, price, side, stop_loss, take_profit, signal):
         }
 
     balance = get_balance()
-    amount = min(calculate_trade_amount(), balance)
+    portfolio = get_portfolio()
+    equity = max(balance, float(portfolio.get("portfolio_value", balance)))
+    stop_distance = abs(float(price) - float(stop_loss or 0))
+    if stop_distance <= 0:
+        return {"executed": False, "reason": "INVALID_STOP", "message": "A valid stop-loss level is required before sizing a paper trade."}
 
-    if amount < 10:
+    # Risk-based sizing: target loss at stop is about 1% of equity, while notional
+    # exposure is capped at 20% of equity to avoid oversized paper positions.
+    risk_cash = equity * RISK_PER_TRADE
+    max_notional = equity * 0.20
+    quantity = min(risk_cash / stop_distance, max_notional / float(price))
+    amount = round(quantity * float(price), 8)
+    if amount < 1 or amount > balance:
         return {
             "executed": False,
             "reason": "INSUFFICIENT_BALANCE",
-            "message": f"Paper balance is ${balance:.2f}; not enough free cash."
+            "message": f"Risk-based position needs ${amount:.2f} in reserved paper capital; available cash is ${balance:.2f}."
         }
-
-    quantity = amount / price
 
     # Both long and short paper positions reserve the same simulated capital.
     # If the position insert fails, restore cash so the account is not left half-updated.
@@ -864,7 +872,7 @@ def paper_close(market, price, signal):
         close_side = "BUY"
     else:
         pnl = (price - avg) * quantity
-        return_value = quantity * price
+        return_value = allocated + pnl
         close_side = "SELL"
 
     set_balance(get_balance() + return_value)
@@ -1611,6 +1619,110 @@ def health():
     })
 
 
+
+# ============================================================
+# V8 FUNCTIONAL WORKSPACE: MANUAL PAPER ORDERS + VOICE AI
+# ============================================================
+
+@app.route("/api/manual-trade", methods=["POST"])
+def api_manual_trade():
+    """Open a user-requested paper position; real-money execution is impossible here."""
+    payload = request.get_json(silent=True) or {}
+    market = str(payload.get("market", "BTC/USD")).upper()
+    side = str(payload.get("side", "BUY")).upper()
+    if market not in MARKETS:
+        return jsonify({"success": False, "error": "Unsupported market."}), 400
+    if side not in ("BUY", "SELL"):
+        return jsonify({"success": False, "error": "Side must be BUY or SELL."}), 400
+    try:
+        analysis = analyze_market(market)
+        price = float(get_market_price(market))
+        if side == "BUY":
+            sl = float(payload.get("stop_loss") or analysis.get("long_stop_loss") or analysis.get("stop_loss") or 0)
+            tp = float(payload.get("take_profit") or analysis.get("long_take_profit") or analysis.get("take_profit") or 0)
+            pos_side = "LONG"
+        else:
+            sl = float(payload.get("stop_loss") or analysis.get("short_stop_loss") or analysis.get("stop_loss") or 0)
+            tp = float(payload.get("take_profit") or analysis.get("short_take_profit") or analysis.get("take_profit") or 0)
+            pos_side = "SHORT"
+        if sl <= 0 or tp <= 0:
+            return jsonify({"success": False, "error": "Market analysis did not provide valid stop-loss and take-profit levels. No trade was placed."}), 422
+        result = paper_open(market, price, pos_side, sl, tp, "MANUAL_" + side)
+        if not result.get("executed"):
+            return jsonify({"success": False, "paper_only": True, "real_orders_disabled": True, "analysis": analysis, "trade": result, "error": result.get("message", "Paper trade was not placed.")}), 409
+        return jsonify({"success": True, "paper_only": True, "real_orders_disabled": True, "analysis": analysis, "trade": result, "portfolio": get_portfolio()})
+    except Exception as exc:
+        return jsonify({"success": False, "paper_only": True, "real_orders_disabled": True, "error": str(exc)}), 502
+
+
+@app.route("/api/candles")
+def api_candles():
+    market = str(request.args.get("market", "BTC/USD")).upper()
+    interval = str(request.args.get("interval", "1h"))
+    allowed = {"1min", "5min", "15min", "30min", "1h", "4h", "1day"}
+    if market not in MARKETS or interval not in allowed:
+        return jsonify({"success": False, "error": "Unsupported market or candle interval."}), 400
+    try:
+        candles, used_interval = get_candles(market, interval, 100)
+        return jsonify({"success": True, "market": market, "interval": used_interval, "candles": candles, "source": "Twelve Data"})
+    except Exception as exc:
+        return jsonify({"success": False, "market": market, "error": str(exc)}), 502
+
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    """Conversational AI. Configure OPENAI_API_KEY in Render for broad, free-form answers."""
+    payload = request.get_json(silent=True) or {}
+    question = str(payload.get("message", "")).strip()
+    if not question:
+        return jsonify({"success": False, "error": "Please ask a question."}), 400
+    if len(question) > 4000:
+        return jsonify({"success": False, "error": "Please keep the question under 4,000 characters."}), 400
+
+    # Account-aware answers use real stored user data, not fabricated stats.
+    low = question.lower()
+    try:
+        if any(x in low for x in ("balance", "portfolio", "equity", "how much money", "profit and loss", "p/l")):
+            p = get_portfolio()
+            answer = (f"Your paper account has {p['cash']:.2f} available cash, portfolio equity of {p['portfolio_value']:.2f}, "
+                      f"{p['open_positions']} open position(s), and unrealized P/L of {p['unrealized_pnl']:.2f}. These are simulated values.")
+            return jsonify({"success": True, "answer": answer, "source": "account data"})
+        if any(x in low for x in ("how many markets", "markets did you execute", "trades today", "executed today", "today's trades")):
+            rows = get_trade_history(500)
+            today = datetime.now(timezone.utc).date()
+            todays = [r for r in rows if str(r.get("created_at", ""))[:10] == today.isoformat()]
+            names = sorted(set(r.get("market", "") for r in todays if r.get("market")))
+            answer = f"Today, your account recorded {len(todays)} paper trade event(s) across {len(names)} market(s). Markets: {', '.join(names) if names else 'none yet'}. This counts stored paper order events, not necessarily unique completed round trips."
+            return jsonify({"success": True, "answer": answer, "source": "trade history"})
+        if any(x in low for x in ("current state of the market", "market right now", "current market", "analyze the market", "analyse the market")):
+            market = str(payload.get("market", "BTC/USD")).upper()
+            if market not in MARKETS: market = "BTC/USD"
+            a = analyze_market(market)
+            reasons = a.get("reasons", [])
+            answer = (f"For {market}, the current backend analysis is {a.get('signal', 'UNKNOWN')} at reference price {a.get('price', 'unavailable')}. "
+                      f"Strategy strength: {a.get('confidence', 'unavailable')}. Risk: {a.get('risk', 'not provided')}. "
+                      f"Reasons: {' '.join(str(x) for x in reasons) if reasons else a.get('message', 'No detailed reasons were returned')}. "
+                      "This is a rule-based paper-trading signal, not a guaranteed prediction.")
+            return jsonify({"success": True, "answer": answer, "source": "live market analysis", "analysis": a})
+    except Exception:
+        pass
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"success": True, "answer": "I can answer account and market questions from TradeMind's stored data, but broad open-ended conversation is not connected yet. To enable that, add OPENAI_API_KEY as a secret environment variable in Render; never put it in this HTML file. I can still explain forex concepts and respond to common greetings, but I won't pretend to know information I cannot retrieve.", "needs_ai_key": True})
+    try:
+        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+        system_prompt = ("You are AI Emmanuel, a friendly voice-first assistant inside TradeMind V8. Respond naturally to greetings and general questions, and specialize in forex/technical analysis including market structure, BOS, CHoCH, support/resistance, trendlines, liquidity, sessions, risk sizing, stop loss and take profit. Use supplied account/market facts only when provided; never invent live prices or executed trades. TradeMind is paper-only: never claim to place real orders. Be clear that analysis is uncertain and educational, not guaranteed financial advice. Keep voice replies concise.")
+        resp = requests.post("https://api.openai.com/v1/chat/completions", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json={"model": model, "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}], "temperature": 0.5}, timeout=30)
+        data = resp.json()
+        if resp.status_code >= 400:
+            raise RuntimeError(data.get("error", {}).get("message", "AI provider request failed."))
+        answer = data["choices"][0]["message"]["content"].strip()
+        return jsonify({"success": True, "answer": answer, "source": "AI assistant"})
+    except Exception as exc:
+        return jsonify({"success": False, "error": "The AI service could not answer right now: " + str(exc)}), 502
+
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({
@@ -1660,3 +1772,4 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "5000")),
         debug=False
 )
+      
