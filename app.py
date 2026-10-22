@@ -9,7 +9,10 @@ from supabase import create_client, Client
 
 app = Flask(__name__)
 # Flask signs the login cookie using a server-side secret. Never put this in frontend code.
-app.secret_key = os.getenv("TRADEMIND_SESSION_SECRET", "").strip() or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+app.secret_key = (os.getenv("TRADEMIND_SESSION_SECRET", "").strip()
+                  or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip())
+if not app.secret_key:
+    raise RuntimeError("Set TRADEMIND_SESSION_SECRET in Render environment variables.")
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -251,16 +254,25 @@ def signup_page():
         else:
             try:
                 data = supabase_auth_request("signup", {"email": email, "password": password, "data": {"full_name": name}})
-                if data.get("access_token") and data.get("user"):
-                    user = data["user"]
-                    if not user.get("email_confirmed_at") and not user.get("confirmed_at"):
-                        error = "Account created, but email verification is required. Check your inbox, then log in."
-                    else:
-                        session.clear(); session["user_id"] = user["id"]; session["user_email"] = email; session["user_name"] = name; session.permanent = True
-                        ensure_user_account(user["id"])
-                        return redirect(url_for("dashboard"))
-                else:
-                    return redirect(url_for("login_page", message="Account created. Check your email for the verification link before logging in."))
+                # Email confirmation is disabled in this Supabase project. When
+                # Supabase returns a session, sign the new user in immediately;
+                # do not block on email_confirmed_at/confirmed_at metadata.
+                user = data.get("user") or {}
+                access_token = data.get("access_token")
+                if user.get("id") and access_token:
+                    session.clear()
+                    session["user_id"] = str(user["id"])
+                    session["user_email"] = user.get("email", email)
+                    session["user_name"] = (user.get("user_metadata") or {}).get("full_name", name)
+                    session.permanent = True
+                    ensure_user_account(user["id"])
+                    return redirect(url_for("dashboard"))
+
+                # Some Supabase configurations return no session from signup.
+                # Send the user to login without incorrectly requiring email
+                # verification; Supabase will give the precise login error if
+                # the project still requires confirmation.
+                return redirect(url_for("login_page", message="Account request completed. Please log in with your email and password."))
             except Exception as exc:
                 error = str(exc)
     return render_template("signup.html", error=error, message=message)
@@ -277,9 +289,9 @@ def login_page():
             data = supabase_auth_request("token?grant_type=password", {"email": email, "password": password})
             user = data.get("user") or {}
             if not user.get("id") or not data.get("access_token"):
-                raise ValueError("Login was not completed. Please verify your email and try again.")
-            if not (user.get("email_confirmed_at") or user.get("confirmed_at")):
-                raise ValueError("Please verify your email before logging in.")
+                raise ValueError("Login was not completed. Check your email and password, then try again.")
+            # The Supabase project is configured with email confirmation OFF.
+            # Do not require email_confirmed_at/confirmed_at to be populated.
             session.clear()
             session["user_id"] = user["id"]
             session["user_email"] = user.get("email", email)
@@ -1648,3 +1660,4 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "5000")),
         debug=False
 )
+    
