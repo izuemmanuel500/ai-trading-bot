@@ -1,24 +1,253 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Log in • TradeMind V8</title>
-  <style>
-    :root{color-scheme:dark;--bg:#080d18;--panel:#101a2c;--line:#263751;--text:#f3f7ff;--muted:#9aabc4;--accent:#69e2bd;--blue:#75a7ff;--danger:#ff8e9a}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(ellipse at top,#162743 0,#080d18 55%);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text)}
-    .card{width:min(100%,440px);padding:30px;border:1px solid var(--line);border-radius:24px;background:rgba(16,26,44,.96);box-shadow:0 24px 80px #0007}.brand{display:flex;align-items:center;gap:12px;margin-bottom:28px}.logo{display:grid;place-items:center;width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,var(--accent),var(--blue));color:#08131f;font-weight:900;font-size:20px}.brand strong{font-size:21px;letter-spacing:.2px}.brand small{display:block;color:var(--muted);margin-top:3px}.eyebrow{color:var(--accent);font-size:11px;letter-spacing:2px;font-weight:800}h1{font-size:30px;line-height:1.15;margin:8px 0}p{color:var(--muted);line-height:1.55}.field{margin:18px 0}.field label{display:block;font-size:13px;margin-bottom:8px;color:#dbe6f8}.field input{width:100%;padding:14px 15px;border:1px solid var(--line);border-radius:12px;background:#0a1220;color:var(--text);font:inherit;outline:none}.field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #69e2bd20}.button{width:100%;border:0;border-radius:12px;padding:15px;background:linear-gradient(100deg,var(--accent),#82d9ed);font-weight:800;font-size:15px;color:#07131c;cursor:pointer;margin-top:8px}.notice{border:1px solid #2d765f;background:#12382e;color:#baf5df;padding:12px;border-radius:11px;margin:14px 0;font-size:13px}.error{border-color:#84434b;background:#391d27;color:#ffc6cd}.foot{text-align:center;margin-top:22px;font-size:14px}.foot a,.small-link{color:var(--accent);text-decoration:none}.small-link{display:block;text-align:right;font-size:13px;margin-top:10px}.disclaimer{font-size:12px;text-align:center;margin-top:22px}
-  </style>
-</head>
-<body><main class="card">
-  <div class="brand"><div class="logo">TM</div><div><strong>TradeMind V8</strong><small>AI-assisted paper trading</small></div></div>
-  <div class="eyebrow">WELCOME BACK</div><h1>Log in to your account</h1><p>Your private workspace, your own $1,000 paper portfolio.</p>
-  {% if message %}<div class="notice">{{ message }}</div>{% endif %}{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-  <form method="post" action="/login">
-    <div class="field"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" required></div>
-    <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required minlength="8"></div>
-    <button class="button" type="submit">Log in securely</button>
-  </form>
-  <div class="foot">New to TradeMind? <a href="/signup">Create an account</a></div>
-  <p class="disclaimer">PAPER MODE ONLY • REAL-MONEY ORDERS DISABLED</p>
-</main></body></html>
-                                                                                                                                     
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080d19">
+    <title>Log In | TradeMind V8</title><style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 16px;
+        background: #080d19;
+        color: #f4f7ff;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .auth-container {
+        width: 100%;
+        max-width: 440px;
+    }
+
+    .brand {
+        text-align: center;
+        margin-bottom: 26px;
+    }
+
+    .brand h1 {
+        font-size: 29px;
+        letter-spacing: 1px;
+        color: #48e0b5;
+    }
+
+    .brand p {
+        color: #8995aa;
+        margin-top: 8px;
+        font-size: 13px;
+    }
+
+    .auth-card {
+        padding: 30px 25px;
+        border: 1px solid #202c41;
+        border-radius: 18px;
+        background: #101827;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.25);
+    }
+
+    .auth-card h2 {
+        font-size: 25px;
+        margin-bottom: 9px;
+    }
+
+    .subtitle {
+        color: #98a5ba;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 25px;
+    }
+
+    .form-group {
+        margin-bottom: 19px;
+    }
+
+    label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #dce5f5;
+    }
+
+    input {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        padding: 12px 14px;
+        border: 1px solid #2b3950;
+        border-radius: 10px;
+        background: #0a1220;
+        color: #ffffff;
+        font-size: 15px;
+        outline: none;
+    }
+
+    input:focus {
+        border-color: #48e0b5;
+        box-shadow: 0 0 0 3px rgba(72, 224, 181, 0.1);
+    }
+
+    input::placeholder {
+        color: #647189;
+    }
+
+    button {
+        width: 100%;
+        min-height: 49px;
+        margin-top: 5px;
+        border: none;
+        border-radius: 10px;
+        background: #48e0b5;
+        color: #07140f;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background: #65f0ca;
+    }
+
+    button:disabled {
+        opacity: 0.65;
+        cursor: wait;
+    }
+
+    .notice {
+        margin-bottom: 18px;
+        padding: 12px;
+        border-radius: 9px;
+        background: #12352f;
+        color: #83f3d2;
+        font-size: 13px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .notice.error {
+        background: #3b2029;
+        color: #ffb7c4;
+    }
+
+    .auth-footer {
+        margin-top: 22px;
+        text-align: center;
+        color: #98a5ba;
+        font-size: 14px;
+        line-height: 1.8;
+    }
+
+    a {
+        color: #48e0b5;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    a:hover {
+        text-decoration: underline;
+    }
+
+    .disclaimer {
+        margin-top: 20px;
+        text-align: center;
+        color: #7f8ba0;
+        font-size: 10px;
+        letter-spacing: 1px;
+        line-height: 1.8;
+    }
+
+    @media (max-width: 380px) {
+        .auth-card {
+            padding: 24px 18px;
+        }
+
+        .brand h1 {
+            font-size: 25px;
+        }
+    }
+</style>
+
+</head><body>
+    <main class="auth-container">
+        <header class="brand">
+            <h1>TradeMind V8</h1>
+            <p>AI-Powered Paper Trading</p>
+        </header>    <section class="auth-card">
+        <h2>Welcome back</h2>
+        <p class="subtitle">
+            Log in to access your paper-trading dashboard,
+            market analysis and trading history.
+        </p>
+
+        {% if message %}
+            <div class="notice" role="status">{{ message }}</div>
+        {% endif %}
+
+        {% if error %}
+            <div class="notice error" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login">
+            <div class="form-group">
+                <label for="email">Email address</label>
+                <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    autocomplete="email"
+                    maxlength="254"
+                    required
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
+                    required
+                >
+            </div>
+
+            <button type="submit" id="loginButton">
+                Log In
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            Don't have an account?
+            <a href="/signup">Create one</a>
+        </div>
+    </section>
+
+    <p class="disclaimer">
+        PAPER MODE ONLY • REAL-MONEY ORDERS DISABLED
+    </p>
+</main>
+
+<script>
+    const loginForm = document.querySelector("form");
+    const loginButton = document.getElementById("loginButton");
+
+    loginForm.addEventListener("submit", function () {
+        if (!loginForm.checkValidity()) {
+            return;
+        }
+
+        loginButton.disabled = true;
+        loginButton.textContent = "Logging in...";
+    });
+</script>
+
+</body>
+  </html>
