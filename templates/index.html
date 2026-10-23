@@ -1,182 +1,1448 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Emmanuel AI Pro - LIVE</title>
-<script src="https://s3.tradingview.com/tv.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#06130e">
+<title>Emmanuel AI Pro — Trading Dashboard</title>
+
 <style>
-:root{--bg:#040a05;--card:#0a1a12;--line:#2a4a2a;--gold:#d9b86a;--text:#f3e9d0;--muted:#8fb090;--green:#0e9f6e;--red:#e8453c}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:radial-gradient(90% 60% at 80% 0%,#6b4a15 0%,transparent 35%),radial-gradient(80% 50% at 0% 0%,#0d2816 0%,#040a05 70%);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
-.top{height:64px;display:flex;justify-content:space-between;align-items:center;padding:0 18px;background:linear-gradient(90deg,#0a1a0f,#0f2314);border-bottom:1px solid #2a442a;position:sticky;top:0;z-index:20}
-.brand{display:flex;gap:12px;align-items:center;font-weight:900}
-.brand b{font-size:22px;color:var(--gold)} .pro{font-size:10px;background:linear-gradient(90deg,#5a4a1a,#d9b86a);color:#000;padding:3px 8px;border-radius:20px;margin-left:6px}
-.stats3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:14px 18px;max-width:1600px;margin:auto}
-.stat{border:1px solid #3a5a30;background:linear-gradient(145deg,#0f2314,#07120a);border-radius:14px;padding:14px 18px;box-shadow:inset 0 1px 0 #d9b86a33}
-.stat small{color:var(--muted);font-size:11px;display:flex;gap:6px;align-items:center}
-.stat b{font-size:26px;color:#fff;display:block;margin-top:2px} .stat span{color:#8edbb0;font-size:12px}
-.main{display:grid;grid-template-columns:1fr 340px;gap:14px;padding:0 18px 18px;max-width:1600px;margin:auto}
-.left{display:flex;flex-direction:column;gap:14px}
-.tvbox{border:1px solid #3d5a2e;border-radius:16px;overflow:hidden;background:#070f08}
-.tvhead{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0c1f12;border-bottom:1px solid #2d4a2a;flex-wrap:wrap}
-.tvhead select{background:#0f2a16;border:1px solid #3a5a30;color:var(--gold);border-radius:8px;padding:7px 10px}
-.fullbtn{margin-left:auto;border:1px solid #d9b86a;background:#1a2f12;color:var(--gold);border-radius:8px;padding:7px 12px;cursor:pointer}
-#tv_chart{height:420px;width:100%;transition:.3s}
-.tvbox.full{position:fixed;inset:0;z-index:99;border-radius:0} .tvbox.full #tv_chart{height:calc(100vh - 200px)}
-.manual{border:1px solid #3a5a2e;background:linear-gradient(145deg,#0a1c10,#070f08);border-radius:16px;padding:14px}
-.manual h3{color:var(--gold);font-size:14px;margin-bottom:10px;display:flex;gap:6px}
-.mrow{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 140px;gap:10px;align-items:end}
-.mrow label{font-size:11px;color:var(--muted)} .mrow input,.mrow select{width:100%;margin-top:4px;background:#0f2a16;border:1px solid #3d5a30;color:#fff;border-radius:8px;padding:9px}
-.buy{background:var(--green);border:0;color:#001a0f;border-radius:10px;padding:12px;font-weight:900;cursor:pointer}
-.sell{background:var(--red);border:0;color:#fff;border-radius:10px;padding:12px;font-weight:900;cursor:pointer}
-.ai{border:1px solid #5a4a2a;background:linear-gradient(160deg,#0f2314,#12120a 60%,#2a200a);border-radius:16px;padding:14px;display:flex;flex-direction:column;height:fit-content;position:sticky;top:78px}
-.cloud{width:140px;height:140px;margin:14px auto;border-radius:50%;background:radial-gradient(circle,#ffe9a0,#d9b86a 60%,#5a4210);box-shadow:0 0 30px #d9b86a88, inset 0 0 20px #fff8; display:grid;place-items:center;cursor:pointer;transition:.15s}
-.cloud:active{transform:scale(.95)}
-.ai button{width:100%;margin-top:8px;background:#121c0f;border:1px solid #3d5a2e;color:var(--gold);border-radius:10px;padding:10px;cursor:pointer}
-.ai button:hover{background:#1a2f12}
-.pos{border:1px solid #3a5a2e;background:#0a1a0f;border-radius:12px;padding:10px;margin-top:12px}
-table{width:100%;border-collapse:collapse;font-size:12px} th,td{padding:7px;border-bottom:1px solid #1e3a1e;text-align:left}
-.modal{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;z-index:100;padding:16px}
-.modal.show{display:flex} .modalbox{background:linear-gradient(145deg,#102314,#0a1008);border:1px solid #d9b86a;border-radius:16px;padding:20px;max-width:680px;width:100%}
-@media(max-width:1100px){.main{grid-template-columns:1fr}.mrow{grid-template-columns:1fr 1fr}.ai{position:relative;top:0}}
+:root{
+ --bg:#050a08;
+ --panel:#0a110d;
+ --panel2:#101a13;
+ --line:#51452b;
+ --gold:#e9cc83;
+ --gold2:#a98b4e;
+ --green:#1d8050;
+ --green2:#31b878;
+ --red:#e34c42;
+ --text:#f4f0df;
+ --muted:#a8ae9e;
+ --radius:15px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+ margin:0;background:
+ radial-gradient(ellipse at 0 35%,#00452c55,transparent 40%),
+ radial-gradient(ellipse at 100% 65%,#88632630,transparent 34%),
+ var(--bg);
+ color:var(--text);
+ font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif
+}
+button,input,select{font:inherit}
+button{cursor:pointer;color:inherit}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{
+ outline:2px solid var(--gold);outline-offset:2px
+}
+a{color:inherit;text-decoration:none}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.gold{color:var(--gold)}
+.green{color:var(--green2)}
+.red{color:#ff7068}
+.small{font-size:11px;color:var(--muted)}
+
+.topbar{
+ position:sticky;top:0;z-index:30;
+ display:flex;align-items:center;justify-content:space-between;
+ gap:15px;padding:12px 24px;min-height:77px;
+ background:#050b08f5;border-bottom:1px solid #786337;
+ backdrop-filter:blur(15px)
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brandlogo{
+ display:grid;place-items:center;width:46px;height:46px;
+ color:var(--gold);font-size:36px
+}
+.brand h1{margin:0;font-size:23px;line-height:1.2;letter-spacing:-.5px}
+.brand small{color:#c3b68d;font-size:11px}
+.probadge{
+ display:inline-block;margin-left:8px;padding:4px 9px;
+ border:1px solid #897343;border-radius:8px;color:var(--gold);
+ font-size:10px;letter-spacing:.5px;vertical-align:middle
+}
+.header-actions{display:flex;align-items:center;gap:17px}
+.iconbutton{
+ width:38px;height:38px;border:0;background:transparent;
+ color:var(--gold);font-size:23px;border-radius:9px
+}
+.iconbutton:hover{background:#1c251b}
+.profile{display:flex;align-items:center;gap:10px}
+.profileicon{
+ width:37px;height:37px;border-radius:50%;
+ background:linear-gradient(145deg,#f1d99c,#92713b);
+ color:#11160f;display:grid;place-items:center;font-size:21px
+}
+.profile-name{font-size:12px;color:#e3d4a7}
+.profile-name small{display:block;color:var(--muted);font-size:10px}
+
+.layout{
+ max-width:1800px;margin:auto;padding:15px 18px 25px;
+ display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px
+}
+.main{min-width:0}
+.stats{
+ display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:14px;margin-bottom:17px
+}
+.stat{
+ position:relative;overflow:hidden;min-width:0;padding:19px;
+ border:1px solid #655334;border-radius:15px;
+ background:linear-gradient(145deg,#0c1710,#060b08 70%);
+ box-shadow:inset 0 0 25px #a9873410
+}
+.stat:after{
+ content:"";position:absolute;right:-38px;bottom:-58px;
+ width:140px;height:100px;border:1px solid #c7a65a44;
+ transform:rotate(-32deg);border-radius:50%
+}
+.stathead{display:flex;align-items:center;gap:10px;color:#d9c99b;font-size:12px}
+.staticon{font-size:24px;color:var(--gold)}
+.stat strong{
+ display:block;font-size:clamp(19px,2vw,30px);
+ letter-spacing:-.6px;margin:7px 0 4px;overflow-wrap:anywhere
+}
+.stat small{display:block;color:#b1c4a9;font-size:11px}
+
+.workspace{min-width:0}
+.chartpanel,.manualpanel,.panel{
+ overflow:hidden;border:1px solid #4b412b;border-radius:15px;
+ background:linear-gradient(145deg,#090f0b,#070b08)
+}
+.panelhead{
+ display:flex;align-items:center;justify-content:space-between;
+ flex-wrap:wrap;gap:10px;padding:14px 16px;
+ border-bottom:1px solid #302c20
+}
+.symbol-title{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+.symbol-title h2{font-size:24px;margin:0;letter-spacing:-.5px}
+.badge{
+ padding:5px 8px;border-radius:7px;background:#30291b;
+ border:1px solid #66532d;color:var(--gold);font-size:10px
+}
+.badge.live{background:#10271b;border-color:#27573a;color:#80e2a8}
+.btn{
+ display:inline-flex;align-items:center;justify-content:center;gap:7px;
+ border:1px solid #675532;background:#111710;color:#e6d6a6;
+ border-radius:9px;padding:10px 13px;font-size:12px
+}
+.btn:hover{background:#24271a}
+.btn-primary{background:linear-gradient(110deg,#755c2d,#b18d48);color:#fff6d9;border:0;font-weight:750}
+.btn-green{background:#24764c;border:1px solid #399b68;color:#fff;font-weight:800}
+.btn-red{background:#c9433b;border:1px solid #ef675c;color:#fff;font-weight:800}
+.btn-block{width:100%}
+
+.chart-tools{
+ display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+ padding:11px 15px;background:#090f0c;border-bottom:1px solid #25271d
+}
+select,input{
+ min-width:0;max-width:100%;background:#101710;
+ color:#f1eddb;border:1px solid #4b4732;border-radius:8px;padding:9px
+}
+.chart-tools select{min-width:110px}
+.timeframes{display:flex;gap:3px;flex-wrap:wrap}
+.timeframes button{
+ border:0;border-radius:6px;background:transparent;
+ color:#b7b9a8;padding:7px 9px;font-size:11px
+}
+.timeframes button.active,.timeframes button:hover{
+ background:#3a3220;color:var(--gold)
+}
+.chart-live{margin-left:auto;font-size:10px;color:#71d99a}
+.chartarea{
+ position:relative;height:430px;min-height:300px;
+ background:#080d0b;overflow:hidden
+}
+#tv_chart_container{width:100%;height:100%;min-height:300px}
+.chartlabel{
+ position:absolute;left:10px;bottom:8px;z-index:2;
+ background:#070c09dd;border:1px solid #332f22;
+ border-radius:6px;padding:5px 8px;font-size:10px;color:#e6d6a6;
+ pointer-events:none
+}
+.chartfooter{
+ display:flex;align-items:center;justify-content:space-between;
+ flex-wrap:wrap;gap:10px;padding:12px 15px;
+ border-top:1px solid #3b3422;background:#0a100c
+}
+.chartfooter-left{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.chartfooter-right{display:flex;gap:8px;flex-wrap:wrap}
+.chartfooter label{font-size:10px;color:#bcb49a}
+.chartfooter select{display:block;margin-top:4px}
+
+.section-tabs{
+ display:flex;gap:5px;overflow:auto;padding:8px;
+ border-bottom:1px solid #302c20
+}
+.section-tabs button{
+ white-space:nowrap;padding:9px 13px;border:0;border-radius:7px;
+ background:transparent;color:#c4c3b3;font-size:11px
+}
+.section-tabs button.active{background:#42371e;color:var(--gold)}
+
+.manualpanel{margin-top:14px}
+.manualhead{display:flex;align-items:center;gap:9px;padding:15px 17px}
+.manualhead h2{margin:0;font-size:18px}
+.manualhead span{font-size:21px;color:var(--gold)}
+.manualbody{
+ display:grid;grid-template-columns:minmax(0,1fr) 215px;gap:18px;
+ padding:0 17px 17px
+}
+.tradeform{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.field{min-width:0;display:flex;flex-direction:column;gap:7px}
+.field label{font-size:11px;color:#d3d0bd}
+.field input,.field select{width:100%;padding:10px}
+.order-buttons{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:2px}
+.order-buttons button{min-height:58px;font-size:16px;border-radius:9px}
+.order-buttons small{display:block;font-size:10px;font-weight:400;margin-top:2px}
+.riskbox{border-left:1px solid #393323;padding:0 0 0 17px}
+.riskbox h3{font-size:13px;margin:0 0 13px}
+.riskbox p{font-size:11px;color:#c4bea7}
+.toggle-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.switch{position:relative;width:43px;height:24px;display:inline-block;flex-shrink:0}
+.switch input{width:0;height:0;opacity:0}
+.slider{
+ position:absolute;inset:0;background:#45483b;border-radius:25px;transition:.2s;cursor:pointer
+}
+.slider:before{
+ content:"";position:absolute;left:3px;bottom:3px;width:18px;height:18px;
+ border-radius:50%;background:#eee3bd;transition:.2s
+}
+.switch input:checked+.slider{background:#27754d}
+.switch input:checked+.slider:before{transform:translateX(19px)}
+
+.rightcol{min-width:0}
+.assistant{
+ position:sticky;top:92px;min-height:650px;height:calc(100vh - 110px);
+ display:flex;flex-direction:column;overflow:hidden;
+ border:1px solid #655334;border-radius:15px;
+ background:linear-gradient(155deg,#0c1510,#060a07 75%,#18180e)
+}
+.assistanthead{padding:16px;border-bottom:1px solid #3c3321}
+.assistanthead h2{margin:0;font-size:20px}
+.assistanthead p{margin:4px 0 0;color:#aab7a5;font-size:11px}
+.ai-orb-wrap{
+ display:grid;place-items:center;padding:28px 10px 14px
+}
+.ai-orb{
+ width:164px;height:164px;position:relative;display:grid;place-items:center;
+ border-radius:50%;border:1px solid #a88a4d;
+ background:radial-gradient(circle,#4a3a1c 0,#1c2416 43%,#090e0a 70%);
+ box-shadow:0 0 0 8px #b18c3320,0 0 35px #d0aa4c24,inset 0 0 28px #e6c16a22
+}
+.ai-orb:before,.ai-orb:after{
+ content:"";position:absolute;inset:12px;border-radius:50%;
+ border:1px solid #d8bd7855
+}
+.ai-orb:after{inset:-9px;border-color:#c9a85833}
+.orb-symbol{font-size:65px;color:#f2d78d;text-shadow:0 0 20px #f5d16a}
+.ai-orb.listening{animation:orbPulse 1.3s infinite}
+.ai-orb.speaking{box-shadow:0 0 0 10px #b18c3330,0 0 55px #d0aa4c77}
+@keyframes orbPulse{50%{transform:scale(1.035);box-shadow:0 0 0 15px #b18c3320,0 0 55px #d0aa4c66}}
+.talktitle{text-align:center;font-size:22px;font-weight:800;color:#f1e1b6}
+.talksubtitle{text-align:center;color:#b6b9a8;font-size:11px;margin-top:7px}
+.micbtn{
+ display:grid;place-items:center;margin:15px auto 9px;width:70px;height:70px;
+ border:1px solid #d3b263;border-radius:50%;
+ background:linear-gradient(145deg,#71552a,#342a18);
+ color:#fff0c0;font-size:28px;box-shadow:0 0 25px #b38b3933
+}
+.micbtn.listening{background:#216f49;animation:orbPulse 1.2s infinite}
+.micbtn.speaking{background:#71552a}
+.micstatus{text-align:center;color:#e5d4a5;font-size:11px;min-height:18px}
+.assistant-actions{display:grid;gap:8px;padding:17px}
+.assistant-actions button{
+ min-height:44px;border:1px solid #69552f;border-radius:9px;
+ background:#0b110c;color:#e4d4a7;font-size:12px
+}
+.assistant-actions button:hover{background:#262519}
+.chatlog{
+ margin:0 14px 12px;padding:10px;overflow:auto;max-height:190px;
+ border:1px solid #393323;border-radius:10px;background:#060b08
+}
+.message{margin-bottom:10px;display:flex}
+.message:last-child{margin-bottom:0}
+.bubble{
+ max-width:100%;padding:10px 11px;border:1px solid #49402a;
+ border-radius:10px;background:#121a11;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere
+}
+.message.user{justify-content:flex-end}
+.message.user .bubble{background:#243622;border-color:#496340}
+.assistant-foot{
+ padding:11px 15px;margin-top:auto;border-top:1px solid #393323;
+ color:#999e8c;text-align:center;font-size:10px
+}
+
+.contentarea{padding:15px;min-height:200px}
+.tablewrap{width:100%;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:480px;font-size:11px}
+th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #302e21;white-space:nowrap}
+th{color:var(--gold);font-weight:600}
+.empty{text-align:center;padding:28px;color:var(--muted)}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:15px}
+.metric{padding:13px;border:1px solid #423b27;border-radius:10px;background:#0b120d}
+.metric small{display:block;color:var(--muted);font-size:10px}
+.metric strong{display:block;font-size:18px;margin-top:5px}
+.academy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lesson{border:1px solid #4c4129;border-radius:10px;padding:13px;background:#0b120d}
+.lesson h3{margin:0 0 6px;font-size:13px;color:var(--gold)}
+.lesson p{margin:0;font-size:11px;color:#c5c7b8}
+.notice{padding:12px;border-radius:9px;border:1px solid #6d5429;background:#211b10;color:#e9d8a8;font-size:11px;margin:12px 0}
+.toast{
+ display:none;position:fixed;z-index:100;bottom:20px;left:50%;
+ transform:translateX(-50%);max-width:92%;
+ padding:12px 17px;border:1px solid #a48b4e;border-radius:10px;
+ background:#11180f;color:#f0dfad;box-shadow:0 8px 30px #0009
+}
+.modal{
+ display:none;position:fixed;inset:0;z-index:80;background:#000c;
+ align-items:center;justify-content:center;padding:16px
+}
+.modal.show{display:flex}
+.modalbox{
+ width:min(620px,100%);max-height:88vh;overflow:auto;padding:20px;
+ border:1px solid #a48b4e;border-radius:15px;background:#0a110c
+}
+.modalbox h2{margin-top:0;color:var(--gold)}
+.modalclose{float:right}
+.fullscreen-chart:fullscreen{background:#050a08;width:100vw;height:100vh}
+.fullscreen-chart:fullscreen #tv_chart_container{height:100vh}
+@media(min-width:1500px){
+ .layout{grid-template-columns:minmax(0,1fr) 340px}
+ .chartarea{height:470px}
+}
+@media(max-width:1050px){
+ .layout{grid-template-columns:minmax(0,1fr) 285px;gap:12px;padding:12px}
+ .manualbody{grid-template-columns:1fr}
+ .riskbox{border-left:0;border-top:1px solid #393323;padding:13px 0 0}
+ .tradeform{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .assistant{min-height:650px}
+}
+@media(max-width:720px){
+ .topbar{padding:10px 12px;min-height:65px}
+ .brandlogo{width:31px;font-size:27px}
+ .brand h1{font-size:16px}
+ .brand small{font-size:9px}
+ .probadge{font-size:8px;margin-left:3px;padding:3px 5px}
+ .header-actions{gap:3px}
+ .header-actions .iconbutton{width:30px;font-size:19px}
+ .profile{gap:5px}
+ .profileicon{width:30px;height:30px;font-size:16px}
+ .profile-name{display:none}
+ .layout{display:flex;flex-direction:column;padding:8px}
+ .stats{gap:7px}
+ .stat{padding:12px 10px}
+ .stathead{font-size:10px;gap:6px}
+ .staticon{font-size:19px}
+ .stat strong{font-size:19px}
+ .stat small{font-size:9px}
+ .symbol-title h2{font-size:20px}
+ .panelhead{padding:12px}
+ .chart-tools{padding:8px;gap:5px}
+ .chart-tools select{font-size:11px;padding:8px}
+ .chart-live{margin-left:0}
+ .chartarea{height:370px;min-height:300px}
+ .chartfooter{padding:9px}
+ .chartfooter-right{width:100%}
+ .chartfooter-right button{flex:1}
+ .manualhead h2{font-size:16px}
+ .manualbody{padding:0 12px 13px}
+ .tradeform{gap:9px}
+ .field label{font-size:10px}
+ .field input,.field select{padding:10px 7px;font-size:12px}
+ .order-buttons{gap:7px}
+ .order-buttons button{font-size:13px;min-height:54px}
+ .assistant{position:relative;top:auto;height:auto;min-height:0}
+ .ai-orb-wrap{padding:20px 10px 10px}
+ .ai-orb{width:135px;height:135px}
+ .orb-symbol{font-size:53px}
+ .assistant-actions{grid-template-columns:1fr 1fr;padding:12px}
+ .assistant-actions button{font-size:10px;padding:8px 5px}
+ .chatlog{max-height:230px}
+ .assistant-foot{padding:10px}
+ .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .academy-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
+
 <body>
-<header class="top">
-<div class="brand"><span style="font-size:26px">✴</span><b>Emmanuel AI Pro</b><span class="pro">PRO • LIVE</span></div>
-<div style="display:flex;gap:14px;align-items:center"><span>🔔</span><span>⚙</span><div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(#d9b86a,#5a4a1a);display:grid;place-items:center">👤</div><small>Alex Morgan ▾</small></div>
+
+<header class="topbar">
+ <div class="brand">
+  <div class="brandlogo">✥</div>
+  <div>
+   <h1>Emmanuel AI Pro <span class="probadge">PRO · LIVE</span></h1>
+   <small>Intelligent Forex Trading Assistant</small>
+  </div>
+ </div>
+
+ <div class="header-actions">
+  <button class="iconbutton" id="notificationsBtn" title="Notifications">♧</button>
+  <button class="iconbutton" id="settingsBtn" title="Settings">⚙</button>
+  <div class="profile">
+   <div class="profileicon">♟</div>
+   <div class="profile-name">
+    <span id="username">{{ current_user_name|default('Trader', true) }}</span>
+    <small>Paper Trader</small>
+   </div>
+  </div>
+  <a href="/logout" class="btn">Log out ↗</a>
+ </div>
 </header>
 
-<div class="stats3">
-<div class="stat"><small>💰 Balance</small><b id="b1">$24,582.47</b><span id="b1sub">+2.34% Today • +$562.10</span></div>
-<div class="stat"><small>📈 Open Positions</small><b id="b2">0 Positions</b><span id="b2sub">P&L: $0.00</span></div>
-<div class="stat"><small>✅ Closed Positions</small><b id="b3">0 Closed</b><span id="b3sub">Today: $0 • Win Rate 0%</span></div>
+<div class="layout">
+
+ <main class="main">
+
+  <section class="stats">
+   <article class="stat">
+    <div class="stathead"><span class="staticon">▱</span>Balance</div>
+    <strong id="cash">$1,000.00</strong>
+    <small id="balanceNote">Paper account balance</small>
+   </article>
+
+   <article class="stat">
+    <div class="stathead"><span class="staticon">⌁</span>Open Positions</div>
+    <strong id="openCount">0 Positions</strong>
+    <small id="openNote">Floating P/L: $0.00</small>
+   </article>
+
+   <article class="stat">
+    <div class="stathead"><span class="staticon">✓</span>Closed Positions</div>
+    <strong id="closedCount">0 Closed</strong>
+    <small id="closedNote">Realized P/L: $0.00</small>
+   </article>
+  </section>
+
+  <section class="workspace" id="tradingWorkspace">
+
+   <section class="chartpanel">
+    <header class="panelhead">
+     <div class="symbol-title">
+      <h2 id="chartSymbolTitle">EUR/USD</h2>
+      <span class="badge" id="timeframeBadge">1H</span>
+      <span class="badge live" id="marketStatus">● CHART</span>
+      <span class="badge" id="priceBadge">Live market chart</span>
+     </div>
+     <button class="btn" id="fullscreenBtn">⛶ Full Screen</button>
+    </header>
+
+    <div class="chart-tools">
+     <select id="market" aria-label="Select trading market">
+      <option value="EUR/USD">EUR/USD</option>
+      <option value="GBP/USD">GBP/USD</option>
+      <option value="USD/JPY">USD/JPY</option>
+      <option value="GBP/JPY">GBP/JPY</option>
+      <option value="USD/CAD">USD/CAD</option>
+      <option value="AUD/USD">AUD/USD</option>
+      <option value="NZD/USD">NZD/USD</option>
+      <option value="BTC/USD">BTC/USD</option>
+      <option value="ETH/USD">ETH/USD</option>
+      <option value="XAU/USD">XAU/USD · Gold</option>
+      <option value="XAG/USD">XAG/USD · Silver</option>
+      <option value="WTI/USD">WTI/USD · Oil</option>
+     </select>
+
+     <div class="timeframes" id="timeframes">
+      <button data-interval="1">1m</button>
+      <button data-interval="5">5m</button>
+      <button data-interval="15">15m</button>
+      <button class="active" data-interval="60">1H</button>
+      <button data-interval="240">4H</button>
+      <button data-interval="D">1D</button>
+      <button data-interval="W">1W</button>
+     </div>
+
+     <span class="chart-live" id="chartConnection">● TradingView chart</span>
+    </div>
+
+    <div class="chartarea fullscreen-chart" id="chartarea">
+     <div id="tv_chart_container"></div>
+     <div class="chartlabel" id="chartLabel">
+      TradingView · Market chart
+     </div>
+    </div>
+
+    <div class="chartfooter">
+     <div class="chartfooter-left">
+      <label>Chart market
+       <select id="marketBottom">
+        <option value="EUR/USD">EUR/USD</option>
+        <option value="GBP/USD">GBP/USD</option>
+        <option value="USD/JPY">USD/JPY</option>
+        <option value="GBP/JPY">GBP/JPY</option>
+        <option value="USD/CAD">USD/CAD</option>
+        <option value="AUD/USD">AUD/USD</option>
+        <option value="NZD/USD">NZD/USD</option>
+        <option value="BTC/USD">BTC/USD</option>
+        <option value="ETH/USD">ETH/USD</option>
+        <option value="XAU/USD">XAU/USD · Gold</option>
+        <option value="XAG/USD">XAG/USD · Silver</option>
+        <option value="WTI/USD">WTI/USD · Oil</option>
+       </select>
+      </label>
+      <span class="small">Chart prices are supplied by TradingView.</span>
+     </div>
+     <div class="chartfooter-right">
+      <button class="btn" id="analyzeBtn">⌕ Analyze Market</button>
+      <button class="btn" id="refreshChartBtn">↻ Refresh Chart</button>
+     </div>
+    </div>
+   </section>
+
+   <section class="manualpanel">
+    <header class="manualhead">
+     <span>ϟ</span>
+     <h2>Manual Trading Panel</h2>
+    </header>
+
+    <div class="manualbody">
+     <form class="tradeform" id="tradeForm">
+      <div class="field">
+       <label for="tradeSymbol">Symbol</label>
+       <select id="tradeSymbol">
+        <option value="EUR/USD">EUR/USD</option>
+        <option value="GBP/USD">GBP/USD</option>
+        <option value="USD/JPY">USD/JPY</option>
+        <option value="GBP/JPY">GBP/JPY</option>
+        <option value="USD/CAD">USD/CAD</option>
+        <option value="AUD/USD">AUD/USD</option>
+        <option value="NZD/USD">NZD/USD</option>
+        <option value="BTC/USD">BTC/USD</option>
+        <option value="ETH/USD">ETH/USD</option>
+        <option value="XAU/USD">XAU/USD</option>
+        <option value="XAG/USD">XAG/USD</option>
+        <option value="WTI/USD">WTI/USD</option>
+       </select>
+      </div>
+
+      <div class="field">
+       <label for="volume">Volume (Lots)</label>
+       <input id="volume" type="number" min="0.01" max="100" step="0.01" value="0.10" required>
+      </div>
+
+      <div class="field">
+       <label for="stopLoss">Stop Loss (Price)</label>
+       <input id="stopLoss" type="number" min="0" step="any" placeholder="Optional">
+      </div>
+
+      <div class="field">
+       <label for="takeProfit">Take Profit (Price)</label>
+       <input id="takeProfit" type="number" min="0" step="any" placeholder="Optional">
+      </div>
+
+      <div class="order-buttons">
+       <button type="button" class="btn-green" id="buyBtn">
+        ♙ BUY
+        <small>Open simulated Buy position</small>
+       </button>
+       <button type="button" class="btn-red" id="sellBtn">
+        ⇩ SELL
+        <small>Open simulated Sell position</small>
+       </button>
+      </div>
+     </form>
+
+     <aside class="riskbox">
+      <div class="toggle-row">
+       <h3>Beginner Mode</h3>
+       <label class="switch">
+        <input type="checkbox" id="beginnerMode" checked>
+        <span class="slider"></span>
+       </label>
+      </div>
+      <p id="beginnerStatus">Easy Mode: On</p>
+      <p>Risk per trade: <strong id="riskText">1%</strong></p>
+      <div class="field">
+       <label for="riskPercent">Risk percentage</label>
+       <select id="riskPercent">
+        <option value="0.5">0.5%</option>
+        <option value="1" selected>1%</option>
+        <option value="2">2%</option>
+       </select>
+      </div>
+      <p>Stop loss and take profit are optional here, but a protective stop is strongly recommended.</p>
+      <p class="gold">PAPER MODE · REAL ORDERS OFF</p>
+     </aside>
+    </div>
+   </section>
+
+   <section class="panel" style="margin-top:14px">
+    <div class="section-tabs" id="dataTabs">
+     <button class="active" data-page="open">Open Positions</button>
+     <button data-page="closed">Closed Trades</button>
+     <button data-page="history">Trade History</button>
+     <button data-page="analysis">Market Analysis</button>
+     <button data-page="performance">Performance</button>
+     <button data-page="scanner">Market Scanner</button>
+     <button data-page="academy">Forex Academy</button>
+    </div>
+    <div class="contentarea" id="contentArea">
+     <div class="empty">Loading your paper-trading positions…</div>
+    </div>
+   </section>
+
+  </section>
+ </main>
+
+ <aside class="rightcol">
+  <section class="assistant">
+   <header class="assistanthead">
+    <h2>✦ AI Assistant</h2>
+    <p><span class="green">●</span> Emmanuel AI · Voice interaction</p>
+   </header>
+
+   <div class="ai-orb-wrap">
+    <div class="ai-orb" id="aiOrb">
+     <span class="orb-symbol">☁</span>
+    </div>
+   </div>
+
+   <div class="talktitle" id="talkTitle">Tap to Talk</div>
+   <div class="talksubtitle" id="talkSubtitle">
+    Speak naturally. Ask about Forex trading.
+   </div>
+
+   <button class="micbtn" id="micBtn" aria-label="Start voice conversation">🎙</button>
+   <div class="micstatus" id="micStatus">Tap the microphone to speak</div>
+
+   <div class="assistant-actions">
+    <button data-prompt="Hello Emmanuel, how are you today?">☀ Say Hello</button>
+    <button data-prompt="Analyze the current market and explain the trend.">⌁ Market Summary</button>
+    <button data-prompt="Explain the risk of my trading setup and how to calculate position size.">◈ Risk Analysis</button>
+    <button data-prompt="Explain a possible trading setup, its confirmation and invalidation.">✧ Trade Education</button>
+    <button data-prompt="Teach me break of structure, change of character and liquidity sweeps.">⌕ Market Structure</button>
+    <button data-prompt="Explain support, resistance, supply and demand zones.">▤ Zones & Structure</button>
+   </div>
+
+   <div class="chatlog" id="chatlog" aria-live="polite">
+    <div class="message">
+     <div class="bubble">Hello! I'm Emmanuel AI. Tap the microphone and talk to me about Forex, market structure, risk management or trading concepts.</div>
+    </div>
+   </div>
+
+   <div class="assistant-foot">
+    Powered by Emmanuel AI · Paper Trading Only
+   </div>
+  </section>
+ </aside>
+
 </div>
 
-<div class="main">
-<div class="left">
-<div class="tvbox" id="tvbox">
-<div class="tvhead">
-<b>EUR/USD • 1H</b><small style="background:#0f2a16;border:1px solid #3a5a30;padding:3px 8px;border-radius:20px;font-size:10px">Live • <span id="price">1.23456</span></small><small style="color:#8edbb0">+0.42% (+0.00519)</small>
-<select id="sym"><option value="OANDA:EURUSD">EUR/USD</option><option value="BINANCE:BTCUSDT">BTC/USD</option><option value="OANDA:GBPUSD">GBP/USD</option><option value="OANDA:XAUUSD">XAU/USD</option><option value="OANDA:GBPJPY">GBP/JPY</option></select>
-<select id="intv"><option value="1">1m</option><option value="5">5m</option><option value="15">15m</option><option value="60" selected>1H</option><option value="240">4H</option><option value="D">1D</option></select>
-<button class="fullbtn" id="fullBtn">⛶ Full Screen</button>
-</div>
-<div id="tv_chart"></div>
-</div>
+<div class="toast" id="toast" role="status"></div>
 
-<div class="manual">
-<h3>⚡ Manual Trading Panel</h3>
-<div class="mrow">
-<label>Symbol<select id="mSym"><option>EUR/USD</option><option>GBP/USD</option><option>BTC/USD</option><option>XAU/USD</option></select></label>
-<label>Volume (Lots)<input id="lot" type="number" value="0.10" step="0.01"></label>
-<label>Stop Loss<input id="sl" value="1.2300"></label>
-<label>Take Profit<input id="tp" value="1.2400"></label>
-<label>Beginner Mode<div style="background:#0f2a16;border:1px solid #3a5a30;border-radius:20px;padding:6px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px">Easy Mode: On</span><span style="width:36px;height:20px;background:#d9b86a;border-radius:20px;display:block;position:relative"><span style="position:absolute;right:2px;top:2px;width:16px;height:16px;background:#fff;border-radius:50%;display:block"></span></span></div><small style="color:var(--muted)">Risk: 1.0% • Lot calculated automatically</small></label>
+<div class="modal" id="modal">
+ <div class="modalbox">
+  <button class="btn modalclose" id="modalClose">✕ Close</button>
+  <div id="modalContent"></div>
+ </div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
-<button class="buy" id="buyBtn">▲ BUY<br><small>Buy EUR/USD</small></button>
-<button class="sell" id="sellBtn">▼ SELL<br><small>Sell EUR/USD</small></button>
-</div>
-<div class="pos"><table><thead><tr><th>Market</th><th>Side</th><th>Lots</th><th>P/L</th><th>Action</th></tr></thead><tbody id="openBody"><tr><td colspan="5" style="color:var(--muted)">No open positions - Balance NOT deducted yet</td></tr></tbody></table></div>
-<div class="pos"><table><thead><tr><th>Time</th><th>Market</th><th>Result</th><th>P/L</th></tr></thead><tbody id="closedBody"><tr><td colspan="4" style="color:var(--muted)">No closed trades - Deduction happens ONLY after loss close</td></tr></tbody></table></div>
-</div>
-</div>
-
-<aside class="ai">
-<h3>✨ AI Assistant</h3>
-<div class="cloud" id="cloud"><div style="font-size:48px">☁</div></div>
-<b style="text-align:center;display:block">Tap to Talk</b><small style="text-align:center;display:block;color:var(--muted)">Ask AI: "Analyze EUR/USD trend"</small>
-<button onclick="aiSpeak('Market Summary')">Market Summary</button>
-<button onclick="aiSpeak('Risk Analysis')">Risk Analysis</button>
-<button onclick="aiSpeak('Trade Suggestion')">Trade Suggestion</button>
-<button style="background:linear-gradient(90deg,#d9b86a,#8a6a2a);color:#000;font-weight:900" id="viewStrat">View AI Strategy Details →</button>
-<small style="margin-top:10px;color:var(--muted);text-align:center;display:block">Powered by Emmanuel AI • Voice Only • Version 1.0 Pro</small>
-<div id="chat" style="margin-top:12px;max-height:160px;overflow:auto;display:flex;flex-direction:column;gap:8px"></div>
-</aside>
-</div>
-
-<div class="modal" id="stratModal"><div class="modalbox">
-<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="color:var(--gold)">🤖 Emmanuel AI Strategy</h2><button onclick="document.getElementById('stratModal').classList.remove('show')" style="background:#1a2f12;border:1px solid #3d5a30;color:#fff;border-radius:8px;padding:4px 10px">✕</button></div>
-<p style="margin:12px 0;color:var(--muted)">This strategy trades real forex logic — not betting.</p>
-<ul style="line-height:1.8">
-<li><b>Entry:</b> Break of Structure (BOS) + Demand/Supply Zone retest + 1H trend alignment</li>
-<li><b>Time Filter:</b> London & New York killzones only (08:00-11:00 & 13:00-16:00 UTC)</li>
-<li><b>News Filter:</b> No entry 15min before/after high impact news</li>
-<li><b>Risk:</b> 1% per trade, lot size auto-calculated from Stop Loss distance</li>
-<li><b>Exit:</b> Take Profit 2R or opposite CHOCH, Stop Loss beyond invalidation</li>
-<li><b>Balance Logic:</b> Balance does NOT deduct on entry. Only when trade closes in loss, that exact loss deducts. Win adds profit after close.</li>
-</ul>
-<div style="margin-top:12px;padding:10px;background:#0a1a0f;border:1px solid #3d5a30;border-radius:10px"><b>Current AI Confidence: <span id="conf">87%</span> Bullish</b><br><small id="confText">EUR/USD holding above 1.082 demand, BOS confirmed, expecting continuation to 1.089</small></div>
-<button class="buy" style="width:100%;margin-top:14px" onclick="autoTrade()">🤖 Let AI Execute Now</button>
-</div></div>
 
 <script>
-let balance=24582.47, open=[], closed=[], curPrice=1.23456, voiceOn=true, rec=null;
-function fmt(n){return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}
-function upd(){
-let upl=open.reduce((a,c)=>a+c.pnl,0);
-document.getElementById('b1').textContent=fmt(balance); document.getElementById('b2').textContent=open.length+' Positions'; document.getElementById('b2sub').textContent='P&L: '+fmt(upl); document.getElementById('b3').textContent=closed.length+' Closed'; document.getElementById('b3sub').textContent='Today: '+fmt(closed.reduce((a,c)=>a+(c.pnl>0?c.pnl:0),0))+' • Win Rate '+(closed.length?Math.round(closed.filter(c=>c.pnl>0).length/closed.length*100):0)+'%';
-}
-function loadTV(){
-let sym=document.getElementById('sym').value, intv=document.getElementById('intv').value;
-if(window.TradingView){ new TradingView.widget({autosize:true,symbol:sym,interval:intv,timezone:'Etc/UTC',theme:'dark',style:'1',locale:'en',toolbar_bg:'#0f2314',enable_publishing:false,allow_symbol_change:false,studies:['RSI','EMA'],container_id:'tv_chart'}); }
-}
-loadTV(); document.getElementById('sym').onchange=loadTV; document.getElementById('intv').onchange=loadTV;
-document.getElementById('fullBtn').onclick=()=>{document.getElementById('tvbox').classList.toggle('full'); document.getElementById('fullBtn').textContent=document.getElementById('tvbox').classList.contains('full')?'↙ Half Screen':'⛶ Full Screen'; setTimeout(loadTV,300)};
+'use strict';
 
-function place(side){
-let lot=parseFloat(document.getElementById('lot').value)||0.1;
-let entry=curPrice*(1+(Math.random()-0.5)*0.002);
-let t={id:Date.now(),market:document.getElementById('mSym').value||'EUR/USD',side,lot,entry,pnl:0,time:new Date().toLocaleTimeString()};
-open.push(t); render(); addChat(`${side} opened at ${entry.toFixed(5)} - Balance NOT deducted yet, this is real forex.`, 'bot'); speak(`${side} opened. No balance deduction until close.`);
-}
-function render(){
-let ob=document.getElementById('openBody');
-ob.innerHTML=open.length?open.map(o=>`<tr><td>${o.market}</td><td style="color:${o.side==='BUY'?'#0e9f6e':'#e8453c'}">${o.side}</td><td>${o.lot}</td><td style="color:${o.pnl>=0?'#0e9f6e':'#e8453c'}">${fmt(o.pnl)}</td><td><button onclick="closeT(${o.id})" style="background:#1a2f12;border:1px solid #3d5a30;color:#d9b86a;border-radius:6px;padding:4px 8px;cursor:pointer">Close</button></td></tr>`).join(''):'<tr><td colspan=5 style="color:var(--muted)">No open positions</td></tr>';
-let cb=document.getElementById('closedBody');
-cb.innerHTML=closed.length?closed.map(c=>`<tr><td>${c.time}</td><td>${c.market}</td><td>${c.pnl>=0?'✅ WIN':'❌ LOSS'}</td><td style="color:${c.pnl>=0?'#0e9f6e':'#e8453c'}">${fmt(c.pnl)}</td></tr>`).join(''):'<tr><td colspan=4 style="color:var(--muted)">No closed</td></tr>';
-upd();
-}
-function closeT(id){
-let i=open.findIndex(o=>o.id===id); if(i<0) return;
-let t=open[i]; let closeP=t.entry*(1+(Math.random()-0.5)*0.015); let pnl=(t.side==='BUY'?closeP-t.entry:t.entry-closeP)*10000*t.lot*10; pnl=Math.round(pnl*100)/100;
-balance+=pnl; closed.unshift({...t,pnl,time:new Date().toLocaleTimeString()}); open.splice(i,1); render();
-addChat(`Closed ${t.side} P/L ${fmt(pnl)}. ${pnl<0?Math.abs(pnl).toFixed(2)+' deducted from balance.':'Profit added.'} New balance ${fmt(balance)}`, 'bot'); speak(pnl>=0?`Win ${pnl.toFixed(2)} dollars`:`Loss ${Math.abs(pnl).toFixed(2)} deducted`);
-}
-document.getElementById('buyBtn').onclick=()=>place('BUY'); document.getElementById('sellBtn').onclick=()=>place('SELL');
-function autoTrade(){let s=Math.random()>0.5?'BUY':'SELL'; place(s); document.getElementById('stratModal').classList.remove('show')}
-document.getElementById('viewStrat').onclick=()=>document.getElementById('stratModal').classList.add('show');
-document.getElementById('stratModal').onclick=e=>{if(e.target.id==='stratModal')e.target.classList.remove('show')}
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
 
-// VOICE AI
-function addChat(txt){let d=document.createElement('div'); d.style.cssText='background:#0f2a16;border:1px solid #3d5a30;border-radius:10px;padding:8px;font-size:12px'; d.textContent=txt; document.getElementById('chat').prepend(d)}
-function speak(t){if(!voiceOn||!('speechSynthesis' in window)) return; speechSynthesis.cancel(); let u=new SpeechSynthesisUtterance(t); u.rate=0.95; speechSynthesis.speak(u);}
-function aiSpeak(type){
-let ans={ 'Market Summary':'EUR/USD 1H is bullish, price broke structure above 1.082, holding demand zone, RSI 58, EMA 50 supportive. I expect continuation.', 'Risk Analysis':'Your risk per trade is 1 percent, lot size auto calculated. Balance only deducts after loss close, not on entry. Keep stop beyond invalidation.', 'Trade Suggestion':'Wait for retest of 1.082 demand, then BUY with stop at 1.078, target 1.089. 2R setup. I can execute for you.'}[type]||'Hi, I am Emmanuel AI, I know BOS, CHOCH, trendline, zones, news, risk. How can I help?';
-addChat(ans); speak(ans);
-}
-function startVoice(){
-let SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){addChat('Use Chrome for voice'); return;}
-if(rec) try{rec.stop()}catch(e){}
-rec=new SR(); rec.lang='en-US';
-rec.onstart=()=>{document.getElementById('cloud').style.boxShadow='0 0 50px #ffe9a0'}
-rec.onend=()=>{document.getElementById('cloud').style.boxShadow='0 0 30px #d9b86a88'}
-rec.onresult=e=>{
-let q=e.results[0][0].transcript; addChat('You: '+q);
-let low=q.toLowerCase(), res='I understand. In forex, mark structure, wait for BOS, then retest, define risk.';
-if(low.includes('hello')||low.includes('hi')) res='Hi! I am fine. I am Emmanuel AI Pro, your forex expert. Ready to analyze with you.';
-else if(low.includes('bos')||low.includes('break of structure')) res='BOS is break of prior swing high in uptrend or swing low in downtrend with strong body close, not wick. Shows continuation. Wait for retest and enter.';
-else if(low.includes('trend')) res='Trendline: connect two swing lows for uptrend, swing highs for downtrend, look for third touch. Break needs close plus displacement.';
-else if(low.includes('zone')||low.includes('supply')||low.includes('demand')) res='Demand zone is last bearish candle before bullish impulse. Supply opposite. Wait for price to return and show BOS on lower timeframe.';
-else if(low.includes('trade for me')||low.includes('auto')){res='Okay, I will analyze and trade for you based on structure, time and news.'; setTimeout(autoTrade,800);}
-addChat(res); speak(res);
+const state = {
+ interval: '60',
+ voiceEnabled: true,
+ listening: false,
+ speaking: false,
+ busy: false,
+ account: {},
+ positions: [],
+ closed: [],
+ history: [],
+ analyses: [],
+ marketInfo: {},
+ page: 'open',
+ beginner: true
 };
-rec.start();
+
+const money = n => '$' + Number(n || 0).toLocaleString('en-US',{
+ minimumFractionDigits:2,maximumFractionDigits:2
+});
+
+function notify(message){
+ const t = $('#toast');
+ t.textContent = message;
+ t.style.display = 'block';
+ clearTimeout(notify.timer);
+ notify.timer = setTimeout(()=>t.style.display='none',4000);
 }
-document.getElementById('cloud').onclick=startVoice;
-setInterval(()=>{open.forEach(o=>o.pnl+=(Math.random()-0.5)*8); curPrice+= (Math.random()-0.5)*0.0005; document.getElementById('price').textContent=curPrice.toFixed(5); render();},2500);
-upd();
+
+function safe(value){
+ return String(value ?? '—');
+}
+
+function market(){
+ return $('#market').value;
+}
+
+function getSymbol(m){
+ const symbols = {
+  'EUR/USD':'OANDA:EURUSD',
+  'GBP/USD':'OANDA:GBPUSD',
+  'USD/JPY':'OANDA:USDJPY',
+  'GBP/JPY':'OANDA:GBPJPY',
+  'USD/CAD':'OANDA:USDCAD',
+  'AUD/USD':'OANDA:AUDUSD',
+  'NZD/USD':'OANDA:NZDUSD',
+  'BTC/USD':'BINANCE:BTCUSDT',
+  'ETH/USD':'BINANCE:ETHUSDT',
+  'XAU/USD':'OANDA:XAUUSD',
+  'XAG/USD':'OANDA:XAGUSD',
+  'WTI/USD':'TVC:USOIL'
+ };
+ return symbols[m] || 'OANDA:EURUSD';
+}
+
+function showTime(){
+ const d = new Date();
+ $('#username').textContent =
+  {{ current_user_name|default('Trader', true)|tojson }};
+ $('#dateText') && ($('#dateText').textContent =
+  d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}));
+}
+
+async function api(path, options={}){
+ const response = await fetch(path,{
+  credentials:'same-origin',
+  ...options,
+  headers:{
+   ...(options.body ? {'Content-Type':'application/json'} : {}),
+   ...(options.headers || {})
+  }
+ });
+
+ let data={};
+ try{data=await response.json()}catch(e){}
+
+ if(response.status===401){
+  location.href='/login';
+  throw new Error('Your session has expired. Please sign in again.');
+ }
+
+ if(!response.ok){
+  throw new Error(data.error || data.message || `Request failed (${response.status})`);
+ }
+ return data;
+}
+
+function setText(id,value){
+ const e=$('#'+id);
+ if(e)e.textContent=value;
+}
+
+function getNumber(obj,keys,fallback=0){
+ for(const k of keys){
+  if(obj && obj[k]!==undefined && obj[k]!==null){
+   const n=Number(obj[k]);
+   if(Number.isFinite(n))return n;
+  }
+ }
+ return fallback;
+}
+
+function normalizeRows(data,keys){
+ for(const key of keys){
+  if(Array.isArray(data?.[key]))return data[key];
+ }
+ return [];
+}
+
+/* LIVE TRADINGVIEW CHART */
+
+let tvScriptPromise=null;
+
+function loadTradingView(){
+ const box=$('#tv_chart_container');
+ if(!box)return;
+
+ box.innerHTML='';
+ setText('chartSymbolTitle',market());
+ setText('timeframeBadge',
+  ({'1':'1M','5':'5M','15':'15M','60':'1H','240':'4H','D':'1D','W':'1W'})[state.interval] || '1H');
+ setText('chartLabel','TradingView chart · '+market());
+ setText('chartConnection','● Loading chart');
+
+ if(!tvScriptPromise){
+  tvScriptPromise=new Promise((resolve,reject)=>{
+   if(window.TradingView){resolve();return}
+   let script=document.getElementById('tv-script');
+   if(!script){
+    script=document.createElement('script');
+    script.id='tv-script';
+    script.src='https://s3.tradingview.com/tv.js';
+    script.async=true;
+    document.head.appendChild(script);
+   }
+   script.onload=()=>window.TradingView?resolve():reject(new Error('TradingView unavailable'));
+   script.onerror=()=>reject(new Error('TradingView could not load'));
+  });
+ }
+
+ tvScriptPromise.then(()=>{
+  if(!box.isConnected)return;
+  box.innerHTML='';
+  new window.TradingView.widget({
+   autosize:true,
+   symbol:getSymbol(market()),
+   interval:state.interval,
+   timezone:'Etc/UTC',
+   theme:'dark',
+   style:'1',
+   locale:'en',
+   toolbar_bg:'#0b110d',
+   enable_publishing:false,
+   allow_symbol_change:true,
+   save_image:true,
+   hide_side_toolbar:false,
+   withdateranges:true,
+   details:true,
+   hotlist:false,
+   calendar:false,
+   studies:['RSI@tv-basicstudies','MACD@tv-basicstudies'],
+   container_id:'tv_chart_container'
+  });
+  setText('chartConnection','● TradingView loaded');
+ }).catch(()=>{
+  setText('chartConnection','Chart unavailable');
+  setText('chartLabel','Unable to load TradingView. Check your internet connection.');
+ });
+}
+
+$('#market').addEventListener('change',()=>{
+ $('#marketBottom').value=market();
+ $('#tradeSymbol').value=market();
+ loadTradingView();
+});
+
+$('#marketBottom').addEventListener('change',()=>{
+ $('#market').value=$('#marketBottom').value;
+ $('#tradeSymbol').value=market();
+ loadTradingView();
+});
+
+$('#tradeSymbol').addEventListener('change',()=>{
+ $('#market').value=$('#tradeSymbol').value;
+ $('#marketBottom').value=market();
+ loadTradingView();
+});
+
+$('#timeframes').querySelectorAll('button').forEach(button=>{
+ button.addEventListener('click',()=>{
+  state.interval=button.dataset.interval;
+  $('#timeframes').querySelectorAll('button').forEach(b=>
+   b.classList.toggle('active',b===button)
+  );
+  loadTradingView();
+ });
+});
+
+$('#fullscreenBtn').addEventListener('click',async()=>{
+ const el=$('#chartarea');
+ try{
+  if(!document.fullscreenElement){
+   await el.requestFullscreen();
+  }else{
+   await document.exitFullscreen();
+  }
+ }catch(e){
+  notify('Full-screen mode is not supported by this browser.');
+ }
+});
+
+$('#refreshChartBtn').addEventListener('click',loadTradingView);
+
+/* ACCOUNT AND POSITION DATA */
+
+async function refreshAccount(){
+ try{
+  const data=await api('/api/portfolio');
+  const p=data.portfolio || data.account || data;
+
+  state.account=p;
+  state.positions=normalizeRows(data,['positions','open_positions_list']);
+  state.closed=normalizeRows(data,['closed_positions','closed_trades']);
+
+  const cash=getNumber(p,['cash','balance','available_cash'],1000);
+  const equity=getNumber(p,['equity','portfolio_value','total_value'],cash);
+  const floating=getNumber(p,['unrealized_pnl','unrealized_profit_loss'],equity-cash);
+
+  setText('cash',money(cash));
+  setText('openCount',getNumber(p,['open_positions','position_count'],state.positions.length)+' Positions');
+  setText('openNote','Floating P/L: '+money(floating));
+  setText('closedCount',getNumber(p,['closed_positions_count','closed_count'],state.closed.length)+' Closed');
+  setText('closedNote','Realized P/L: '+money(getNumber(p,['realized_pnl','realized_profit_loss'],0)));
+
+  renderCurrentPage();
+ }catch(e){
+  console.warn('Portfolio refresh:',e.message);
+ }
+}
+
+async function refreshHistory(){
+ try{
+  const data=await api('/api/history?limit=100');
+  state.history=normalizeRows(data,['trades','history','analysis_history']);
+  if(state.page==='history'||state.page==='closed')renderCurrentPage();
+ }catch(e){
+  console.warn('History refresh:',e.message);
+ }
+}
+
+/* RENDER POSITIONS AND HISTORY */
+
+function table(headers,rows){
+ if(!rows.length)return '<div class="empty">No records available yet.</div>';
+
+ let html='<div class="tablewrap"><table><thead><tr>';
+ headers.forEach(h=>html+='<th>'+h+'</th>');
+ html+='</tr></thead><tbody>';
+
+ rows.forEach(r=>{
+  html+='<tr>';
+  r.forEach(v=>html+='<td>'+escapeHTML(v)+'</td>');
+  html+='</tr>';
+ });
+ return html+'</tbody></table></div>';
+}
+
+function escapeHTML(value){
+ return String(value??'—').replace(/[&<>"']/g,c=>({
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+ })[c]);
+}
+
+function renderCurrentPage(){
+ const area=$('#contentArea');
+ if(!area)return;
+
+ if(state.page==='open'){
+  const rows=state.positions.map(p=>[
+   p.market||p.symbol||'—',
+   p.side||p.type||'—',
+   p.volume??p.lots??p.quantity??'—',
+   p.entry_price??p.open_price??'—',
+   p.stop_loss??'—',
+   p.take_profit??'—',
+   money(p.unrealized_pnl??p.pnl??p.profit??0),
+   p.id??p.position_id??'—'
+  ]);
+
+  area.innerHTML=
+   '<div class="metrics">'+
+    '<div class="metric"><small>Open Positions</small><strong>'+state.positions.length+'</strong></div>'+
+    '<div class="metric"><small>Floating P/L</small><strong>'+money(getNumber(state.account,['unrealized_pnl','unrealized_profit_loss'],0))+'</strong></div>'+
+    '<div class="metric"><small>Account Balance</small><strong>'+money(getNumber(state.account,['cash','balance','available_cash'],1000))+'</strong></div>'+
+   '</div>'+
+   table(['Market','Side','Lots','Entry','Stop Loss','Take Profit','Floating P/L','Position ID'],rows);
+  return;
+ }
+
+ if(state.page==='closed'){
+  const rows=state.history.filter(r=>
+   /closed|close|exit/i.test(String(r.status||r.action||r.type||'')) ||
+   r.closed_at || r.close_price!==undefined
+  ).map(r=>[
+   r.market||r.symbol||'—',
+   r.side||r.action||'—',
+   r.entry_price??r.open_price??'—',
+   r.close_price??r.exit_price??'—',
+   money(r.realized_pnl??r.pnl??r.profit??0),
+   r.closed_at||r.created_at||r.timestamp||'—'
+  ]);
+
+  area.innerHTML=table(['Market','Side','Entry','Exit','Realized P/L','Closed At'],rows);
+  return;
+ }
+
+ if(state.page==='history'){
+  const rows=state.history.map(r=>[
+   r.created_at||r.timestamp||'—',
+   r.market||r.symbol||'—',
+   r.action||r.signal||r.side||'—',
+   r.status||'—',
+   r.reason||r.message||r.pnl||'—'
+  ]);
+  area.innerHTML=table(['Time','Market','Action','Status','Details'],rows);
+  return;
+ }
+
+ if(state.page==='performance'){
+  const trades=state.history;
+  area.innerHTML=
+   '<div class="metrics">'+
+    '<div class="metric"><small>History Records</small><strong>'+trades.length+'</strong></div>'+
+    '<div class="metric"><small>Account Balance</small><strong>'+money(getNumber(state.account,['cash','balance'],1000))+'</strong></div>'+
+    '<div class="metric"><small>Realized P/L</small><strong>'+money(getNumber(state.account,['realized_pnl','realized_profit_loss'],0))+'</strong></div>'+
+   '</div>'+
+   '<p class="muted">Performance figures depend on the closed-trade records returned by the backend.</p>'+
+   '<button class="btn" id="reloadPerformance">Refresh performance</button>';
+  $('#reloadPerformance').onclick=async()=>{await refreshHistory();await refreshAccount()};
+  return;
+ }
+
+ if(state.page==='analysis'){
+  area.innerHTML=
+   '<h3>Market Analysis</h3>'+
+   '<p class="muted">Request a current analysis for the selected market.</p>'+
+   '<button class="btn btn-primary" id="analysisPageButton">Analyze '+escapeHTML(market())+'</button>'+
+   '<div id="analysisPageResult" style="margin-top:15px"></div>';
+  $('#analysisPageButton').onclick=runAnalysis;
+  return;
+ }
+
+ if(state.page==='scanner'){
+  area.innerHTML=
+   '<h3>Market Scanner</h3>'+
+   '<p class="muted">Request a scan from your configured TradeMind backend.</p>'+
+   '<button class="btn btn-primary" id="scannerButton">Run Market Scan</button>'+
+   '<div id="scannerResult" style="margin-top:15px"></div>';
+  $('#scannerButton').onclick=runScanner;
+  return;
+ }
+
+ if(state.page==='academy'){
+  area.innerHTML=
+   '<h3 class="gold">Forex Academy</h3>'+
+   '<p class="muted">Learn the foundations of technical analysis, market structure and risk management.</p>'+
+   '<div class="academy-grid">'+
+   lesson('Break of Structure (BOS)','A BOS occurs when price breaks a meaningful previous swing in the direction of the established trend. Look for a candle close beyond the swing and assess whether the break is genuine.')+
+   lesson('Change of Character (CHoCH)','A potential early warning that market structure is changing. It is not proof of reversal: confirm with context, displacement and subsequent price action.')+
+   lesson('Support and Resistance','Zones where price has previously reacted. Treat them as areas rather than exact lines, and consider how price arrives at and responds to each zone.')+
+   lesson('Trend Lines','Connect meaningful swing points without forcing the line. A break is more convincing when supported by a close, structure change and follow-through.')+
+   lesson('Supply and Demand','Areas associated with previous selling or buying imbalances. They can fail, so define invalidation and avoid assuming every revisit will reverse.')+
+   lesson('Liquidity and Sweeps','Price can briefly move beyond obvious highs or lows before reversing or continuing. A wick alone does not confirm the next move.')+
+   lesson('Stop Loss and Position Size','Choose the invalidation point first. Estimate the monetary loss at the stop using the instrument’s contract specifications, then size the position to fit the risk budget.')+
+   lesson('News and Sessions','Economic releases can increase volatility and spreads. Check a reliable economic calendar and the broker’s trading conditions before considering a trade.')+
+   '</div>';
+  return;
+ }
+
+ if(state.page==='settings'){
+  area.innerHTML=
+   '<h3>Settings</h3>'+
+   '<p class="muted">TradeMind is configured for simulated trading. Real-money order execution is disabled.</p>'+
+   '<div class="field"><label>Voice responses</label><button class="btn" id="voiceSetting">'+(state.voiceEnabled?'Mute voice responses':'Enable voice responses')+'</button></div>'+
+   '<div class="field"><label>Beginner Mode</label><button class="btn" id="beginnerSetting">'+(state.beginner?'Turn Beginner Mode off':'Turn Beginner Mode on')+'</button></div>'+
+   '<button class="btn" id="reloadAccount">Refresh account data</button>';
+  $('#voiceSetting').onclick=()=>{state.voiceEnabled=!state.voiceEnabled;renderCurrentPage()};
+  $('#beginnerSetting').onclick=()=>{state.beginner=!state.beginner;$('#beginnerMode').checked=state.beginner;updateBeginner();renderCurrentPage()};
+  $('#reloadAccount').onclick=refreshAccount;
+ }
+}
+
+function lesson(title,text){
+ return '<article class="lesson"><h3>'+title+'</h3><p>'+text+'</p></article>';
+}
+
+const pages={
+ open:'Open Positions',
+ closed:'Closed Trades',
+ history:'Trade History',
+ analysis:'Market Analysis',
+ performance:'Performance',
+ scanner:'Market Scanner',
+ academy:'Forex Academy',
+ settings:'Settings'
+};
+
+function showPage(page){
+ if(!pages[page])page='open';
+ state.page=page;
+ $$('#dataTabs button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+ $$('.sidebar-nav').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+ renderCurrentPage();
+ if(page==='history'||page==='closed')refreshHistory();
+ if(page==='open')refreshAccount();
+ if(page==='trading'){
+  $('#tradingWorkspace').scrollIntoView({behavior:'smooth',block:'start'});
+ }
+}
+
+$('#dataTabs').querySelectorAll('button').forEach(b=>{
+ b.addEventListener('click',()=>showPage(b.dataset.page));
+});
+
+$$('.sidebar-nav').forEach(b=>{
+ b.addEventListener('click',()=>showPage(b.dataset.page));
+});
+
+/* MANUAL PAPER ORDERS */
+
+async function placeOrder(side){
+ const symbol=$('#tradeSymbol').value;
+ const volume=Number($('#volume').value);
+ const stopLoss=$('#stopLoss').value;
+ const takeProfit=$('#takeProfit').value;
+
+ if(!Number.isFinite(volume)||volume<=0){
+  notify('Enter a valid trading volume.');
+  return;
+ }
+
+ if(stopLoss && Number(stopLoss)<=0){
+  notify('Stop-loss price must be positive.');
+  return;
+ }
+
+ if(takeProfit && Number(takeProfit)<=0){
+  notify('Take-profit price must be positive.');
+  return;
+ }
+
+ if(stopLoss && takeProfit){
+  if(side==='BUY' && Number(stopLoss)>=Number(takeProfit)){
+   notify('For a BUY, the stop loss should be below the take profit.');
+   return;
+  }
+  if(side==='SELL' && Number(stopLoss)<=Number(takeProfit)){
+   notify('For a SELL, the stop loss should be above the take profit.');
+   return;
+  }
+ }
+
+ const riskPercent=Number($('#riskPercent').value);
+ const button=$('#'+(side==='BUY'?'buyBtn':'sellBtn'));
+ button.disabled=true;
+
+ try{
+  const payload={
+   market:symbol,
+   side,
+   volume,
+   lots:volume,
+   stop_loss:stopLoss?Number(stopLoss):null,
+   take_profit:takeProfit?Number(takeProfit):null,
+   risk_percent:riskPercent,
+   mode:'paper'
+  };
+
+  const result=await api('/api/manual-trade',{
+   method:'POST',
+   body:JSON.stringify(payload)
+  });
+
+  const trade=result.trade||result.position||{};
+  addMessage(
+   'Paper '+side+' request completed for '+symbol+'. '+
+   'Status: '+(trade.status||result.status||'Accepted')+'. '+
+   'The backend response determines whether a position was actually opened.'
+  );
+
+  notify('Paper order request completed.');
+  await refreshAccount();
+  await refreshHistory();
+ }catch(e){
+  notify('Order not confirmed: '+e.message);
+  addMessage('I could not confirm the paper order. '+e.message);
+ }finally{
+  button.disabled=false;
+ }
+}
+
+$('#buyBtn').addEventListener('click',()=>placeOrder('BUY'));
+$('#sellBtn').addEventListener('click',()=>placeOrder('SELL'));
+
+function updateBeginner(){
+ state.beginner=$('#beginnerMode').checked;
+ setText('beginnerStatus','Easy Mode: '+(state.beginner?'On':'Off'));
+ setText('riskText',$('#riskPercent').value+'%');
+}
+
+$('#beginnerMode').addEventListener('change',updateBeginner);
+$('#riskPercent').addEventListener('change',updateBeginner);
+
+/* MARKET ANALYSIS */
+
+async function runAnalysis(){
+ const symbol=market();
+ setText('chartLabel','Analyzing '+symbol+'…');
+ $('#analyzeBtn').disabled=true;
+
+ try{
+  let result;
+  try{
+   result=await api('/api/analysis?market='+encodeURIComponent(symbol));
+  }catch(firstError){
+   result=await api('/api/run',{
+    method:'POST',
+    body:JSON.stringify({market:symbol})
+   });
+  }
+
+  const a=result.analysis||result.result||result;
+  const answer=
+   symbol+' analysis: '+(a.signal||a.action||'No confirmed signal')+
+   '. Price: '+(a.price??'not supplied')+
+   '. Confidence: '+(a.confidence??'not supplied')+
+   '. Stop loss: '+(a.stop_loss??'not supplied')+
+   '. Take profit: '+(a.take_profit??'not supplied')+
+   '. '+(Array.isArray(a.reasons)?a.reasons.join(' '):(a.reason||a.message||'Review current price action and risk before making a decision.'));
+
+  addMessage(answer);
+  setText('chartLabel',symbol+' · '+(a.signal||a.action||'Analysis received'));
+  const resultBox=$('#analysisPageResult');
+  if(resultBox)resultBox.textContent=answer;
+
+  notify('Analysis response received.');
+ }catch(e){
+  setText('chartLabel','Analysis unavailable · '+symbol);
+  notify(e.message);
+  addMessage('I could not retrieve the market analysis: '+e.message);
+ }finally{
+  $('#analyzeBtn').disabled=false;
+ }
+}
+
+$('#analyzeBtn').addEventListener('click',runAnalysis);
+
+/* MARKET SCANNER */
+
+async function runScanner(){
+ const box=$('#scannerResult');
+ if(box)box.textContent='Scanning configured markets…';
+
+ try{
+  const result=await api('/api/autonomous-run',{
+   method:'POST',
+   body:JSON.stringify({mode:'scan'})
+  });
+
+  const rows=result.results||result.markets||[];
+  if(box){
+   box.replaceChildren();
+   if(!rows.length){
+    box.textContent='The backend returned no scan results.';
+   }else{
+    const ul=document.createElement('ul');
+    rows.forEach(r=>{
+     const li=document.createElement('li');
+     li.textContent=(r.market||r.symbol||'Market')+': '+(r.signal||r.action||'No signal');
+     ul.append(li);
+    });
+    box.append(ul);
+   }
+  }
+  addMessage('Market scan finished. I have displayed the results returned by the backend.');
+ }catch(e){
+  if(box)box.textContent='Scan unavailable: '+e.message;
+  notify(e.message);
+ }
+}
+
+/* VOICE ASSISTANT */
+
+function addMessage(text,who='bot'){
+ const row=document.createElement('div');
+ row.className='message '+(who==='user'?'user':'bot');
+ const bubble=document.createElement('div');
+ bubble.className='bubble';
+ bubble.textContent=text;
+ row.append(bubble);
+ $('#chatlog').append(row);
+ $('#chatlog').scrollTop=$('#chatlog').scrollHeight;
+}
+
+function speak(text){
+ if(!state.voiceEnabled||!('speechSynthesis' in window)){
+  setText('micStatus','Response displayed.');
+  return;
+ }
+
+ window.speechSynthesis.cancel();
+
+ const utterance=new SpeechSynthesisUtterance(text);
+ utterance.lang='en-US';
+ utterance.rate=1;
+ utterance.pitch=1;
+
+ utterance.onstart=()=>{
+  state.speaking=true;
+  $('#aiOrb').classList.add('speaking');
+  $('#micBtn').classList.add('speaking');
+  setText('talkTitle','Emmanuel is speaking');
+  setText('micStatus','Speaking…');
+ };
+
+ utterance.onend=()=>{
+  state.speaking=false;
+  $('#aiOrb').classList.remove('speaking');
+  $('#micBtn').classList.remove('speaking');
+  setText('talkTitle','Tap to Talk');
+  setText('micStatus','Tap the microphone to speak');
+ };
+
+ utterance.onerror=()=>{
+  state.speaking=false;
+  $('#aiOrb').classList.remove('speaking');
+  $('#micBtn').classList.remove('speaking');
+  setText('micStatus','Voice playback unavailable.');
+ };
+
+ window.speechSynthesis.speak(utterance);
+}
+
+async function askEmmanuel(question){
+ if(!question||state.busy)return;
+
+ state.busy=true;
+ addMessage(question,'user');
+ setText('talkTitle','Thinking…');
+ setText('micStatus','Preparing a response…');
+
+ try{
+  const result=await api('/api/chat',{
+   method:'POST',
+   body:JSON.stringify({
+    message:question,
+    market:market(),
+    mode:'paper'
+   })
+  });
+
+  const answer=result.answer||result.response||result.message;
+  if(!answer)throw new Error('The AI endpoint returned no answer.');
+
+  addMessage(answer);
+  speak(answer);
+ }catch(e){
+  const answer='I could not reach the configured AI assistant. '+e.message;
+  addMessage(answer);
+  setText('talkTitle','Assistant unavailable');
+  setText('micStatus','Check the AI backend connection.');
+  notify(e.message);
+ }finally{
+  state.busy=false;
+ }
+}
+
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recognition=null;
+
+function startListening(){
+ if(!SR){
+  notify('Voice recognition is unavailable in this browser. Try Chrome and allow microphone access.');
+  setText('micStatus','Speech recognition unavailable.');
+  return;
+ }
+
+ if(state.listening){
+  try{recognition.stop()}catch(e){}
+  return;
+ }
+
+ if(state.speaking&&window.speechSynthesis){
+  window.speechSynthesis.cancel();
+ }
+
+ recognition=new SR();
+ recognition.lang='en-US';
+ recognition.interimResults=true;
+ recognition.continuous=false;
+ recognition.maxAlternatives=1;
+
+ let finalTranscript='';
+
+ recognition.onstart=()=>{
+  state.listening=true;
+  $('#micBtn').classList.add('listening');
+  $('#aiOrb').classList.add('listening');
+  setText('talkTitle','Listening to you');
+  setText('talkSubtitle','Speak naturally. Emmanuel is listening.');
+  setText('micStatus','Listening… speak now');
+ };
+
+ recognition.onresult=event=>{
+  let interim='';
+  for(let i=event.resultIndex;i<event.results.length;i++){
+   const transcript=event.results[i][0].transcript;
+   if(event.results[i].isFinal)finalTranscript+=transcript;
+   else interim+=transcript;
+  }
+  setText('micStatus',finalTranscript||interim||'Listening…');
+ };
+
+ recognition.onerror=event=>{
+  setText('micStatus','Microphone: '+event.error);
+ };
+
+ recognition.onend=()=>{
+  state.listening=false;
+  $('#micBtn').classList.remove('listening');
+  $('#aiOrb').classList.remove('listening');
+  setText('talkTitle','Tap to Talk');
+  setText('talkSubtitle','Speak naturally. Ask about Forex trading.');
+
+  const question=finalTranscript.trim();
+  if(question){
+   askEmmanuel(question);
+  }else{
+   setText('micStatus','Tap the microphone to speak');
+  }
+ };
+
+ try{
+  recognition.start();
+ }catch(e){
+  notify('Could not start the microphone. Tap again.');
+ }
+}
+
+$('#micBtn').addEventListener('click',startListening);
+
+$$('.assistant-actions [data-prompt]').forEach(button=>{
+ button.addEventListener('click',()=>askEmmanuel(button.dataset.prompt));
+});
+
+$('#notificationsBtn').addEventListener('click',()=>{
+ openModal(
+  '<h2>Notifications</h2>'+
+  '<p class="muted">Trade alerts and account notifications depend on the backend services configured for your account.</p>'
+ );
+});
+
+$('#settingsBtn').addEventListener('click',()=>showPage('settings'));
+
+function openModal(html){
+ $('#modalContent').innerHTML=html;
+ $('#modal').classList.add('show');
+}
+
+$('#modalClose').addEventListener('click',()=>$('#modal').classList.remove('show'));
+$('#modal').addEventListener('click',e=>{
+ if(e.target===$('#modal'))$('#modal').classList.remove('show');
+});
+
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&$('#modal').classList.contains('show')){
+  $('#modal').classList.remove('show');
+ }
+});
+
+/* INITIALIZE */
+
+$('#market').value='EUR/USD';
+$('#marketBottom').value='EUR/USD';
+$('#tradeSymbol').value='EUR/USD';
+
+updateBeginner();
+loadTradingView();
+refreshAccount();
+refreshHistory();
+showPage('open');
+
+setInterval(refreshAccount,30000);
+setInterval(refreshHistory,60000);
 </script>
+
 </body>
-                    </html>
+  </html>
